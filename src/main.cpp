@@ -36,9 +36,10 @@ void opcontrol() {
   }};
 
   while (true) {
-    model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
+    model->driveVector(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   controller.getAnalog(okapi::ControllerAnalog::leftX));
 
     pros::delay(10);
   }
+  
 }
