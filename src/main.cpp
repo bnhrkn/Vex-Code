@@ -1,20 +1,20 @@
 #include "main.h"
-#include "okapi/api/chassis/model/skidSteerModel.hpp"
-#include "okapi/api/device/motor/abstractMotor.hpp"
-#include "okapi/impl/device/button/controllerButton.hpp"
-#include "okapi/impl/device/controllerUtil.hpp"
-#include "pros/misc.h"
-#include "pros/misc.hpp"
+#include "project/ui.hpp"
+#include "display/lv_core/lv_obj.h"
+#include "display/lv_objx/lv_btn.h"
+#include "display/lv_objx/lv_chart.h"
+#include "display/lv_objx/lv_list.h"
 #include "pros/rtos.hpp"
 #include <atomic>
 #include <cstddef>
-#include <iterator>
+#include <functional>
+#include <map>
 #include <memory>
 #include <string>
 #include <string_view>
-#include <vector>
 
 using namespace okapi::literals;
+okapi::Controller controller;
 
 auto drive =
     okapi::ChassisControllerBuilder()
@@ -25,7 +25,49 @@ auto drive =
 
 void on_center_button() {}
 
-void initialize() {}
+// display display(lv_scr_act());
+// auto baseScr = lv_scr_act();
+// auto navList = lv_list_create(baseScr, NULL);
+
+// auto graph = lv_chart_create(baseScr, NULL);
+
+// lv_res_t graphBtn(lv_obj_t*){
+//   lv_obj_set_hidden(graph, false);
+//   // lv_obj_set_hidden(autonSelector, true);
+//   return LV_RES_OK;
+// }
+// lv_res_t autonBtn(lv_obj_t*){
+//   lv_obj_set_hidden(graph, true);
+//   return LV_RES_OK;
+// }
+
+//static const char * autonMap[] = {"1", "2", ""};
+//std::map<const char *, std::size_t> autonMap = {};
+
+auto display = ui::getInstance();
+
+
+void initialize() {
+  controller.clear();
+
+  display->init();
+  // screen is 480 x 240 pixels
+  // lv_theme_set_current(lv_theme_night_init(266, &lv_font_dejavu_20));
+
+  // lv_obj_set_size(navList, 100, 240);
+  // lv_obj_align(navList, baseScr, LV_ALIGN_IN_TOP_LEFT, 0, 0);
+  // lv_list_add(navList, NULL, "Graph", graphBtn);
+  // lv_list_add(navList, NULL, "Auton", autonBtn);
+
+  // lv_obj_set_hidden(graph, true);
+  // lv_obj_set_size(graph, 380, 240);
+  // lv_obj_align(graph, navList, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+
+
+  // lv_btn_set_action(graphBtn, LV_BTN_ACTION_PR, [=]() {});
+
+  // auto chart = lv_chart_create(graphScreen, NULL);
+}
 
 void disabled() {}
 
@@ -34,8 +76,6 @@ void competition_initialize() {}
 void autonomous() {}
 
 void opcontrol() {
-  okapi::Controller controller;
-
   auto model{drive->getModel()};
 
   pros::Task matchTimer{[&] {
