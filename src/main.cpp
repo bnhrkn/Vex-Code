@@ -1,9 +1,9 @@
 #include "main.h"
-#include "project/ui.hpp"
 #include "display/lv_core/lv_obj.h"
 #include "display/lv_objx/lv_btn.h"
 #include "display/lv_objx/lv_chart.h"
 #include "display/lv_objx/lv_list.h"
+#include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <atomic>
 #include <cstddef>
@@ -41,14 +41,13 @@ void on_center_button() {}
 //   return LV_RES_OK;
 // }
 
-//static const char * autonMap[] = {"1", "2", ""};
-//std::map<const char *, std::size_t> autonMap = {};
+// static const char * autonMap[] = {"1", "2", ""};
+// std::map<const char *, std::size_t> autonMap = {};
 
 auto display = ui::getInstance();
 
-
 void initialize() {
-  controller.clear();
+  // controller.clear();
 
   display->init();
   // screen is 480 x 240 pixels
@@ -62,7 +61,6 @@ void initialize() {
   // lv_obj_set_hidden(graph, true);
   // lv_obj_set_size(graph, 380, 240);
   // lv_obj_align(graph, navList, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
-
 
   // lv_btn_set_action(graphBtn, LV_BTN_ACTION_PR, [=]() {});
 
@@ -92,36 +90,59 @@ void opcontrol() {
                                                           "tank"};
   std::atomic<std::size_t> driveMode = 0;
 
-  pros::Task modeSwitcher{
-      [&] { // Task which allows the driver to select different modes nicely
-        auto i = driveMode.load();
-        okapi::ControllerButton yBtn{okapi::ControllerDigital::Y};
+  pros::Task modeSwitcher{[&] {
+    auto i = driveMode.load(); // For looping over driveModes
+    okapi::ControllerButton btn (okapi::ControllerDigital::Y);
 
-        controller.setText( // Set the initial drive mode text
-            0, 0,
-            std::string("mode: ").append(driveModes.at(driveMode.load())));
+    controller.setText( // Set the initial drive mode text
+        0, 0, std::string("mode: ").append(driveModes.at(driveMode.load())));
 
-        while (true) {
-          if (yBtn.isPressed()) {
-            driveMode = i;
-            controller.setText(0, 0,
-                               std::string("mode: ")
-                                   .append(driveModes.at(driveMode))
-                                   .append(std::string_view("          ")));
-            if (i + 1 < driveModes.size()) {
-              i++;
-            } else {
-              i = 0;
-            }
-            int delay = 600;
-            for (int i = 0; i < delay && !yBtn.isPressed(); i += 50) {
-              pros::delay(50);
-            }
-          } else {
-            pros::delay(50);
-          }
+    while (true) {
+      if (btn.isPressed()) {
+        driveMode = i;
+        controller.setText(0, 0,
+                           std::string("mode: ")
+                               .append(driveModes.at(driveMode.load()))
+                               .append(std::string_view("          ")));
+        if (i + 1 < driveModes.size()) {
+          i++;
+        } else {
+          i = 0;
         }
-      }};
+        int delay = 600;
+        for (int i = 0; i < delay && btn.isPressed(); i += 50) {
+          pros::delay(50);
+        }
+      } else {
+        std::cout << driveModes.at(driveMode.load()) << "\n";
+        pros::delay(50);
+      }
+    }
+  }};
+
+  pros::Task trigger{[&] { // Task for the disc shooter trigger
+    constexpr int burstShots = 3;
+    constexpr int shotDelay = 100;
+    pros::ADIDigitalOut cylinder(1, false);
+    okapi::ControllerButton trigger(okapi::ControllerDigital::R2);
+    int count = 0;
+    int burstCount = 0;
+    while (true) {
+      if (trigger.isPressed() && burstCount < burstShots) {
+        controller.setText(1, 0, std::to_string(++count));
+        burstCount++;
+        cylinder.set_value(true);
+        pros::delay(shotDelay);
+        cylinder.set_value(false);
+        pros::delay(shotDelay);
+      } else {
+        if (!trigger.isPressed()) {
+          burstCount = 0;
+        }
+        pros::delay(10);
+      }
+    }
+  }};
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
 
