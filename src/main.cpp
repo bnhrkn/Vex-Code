@@ -3,6 +3,13 @@
 #include "display/lv_objx/lv_btn.h"
 #include "display/lv_objx/lv_chart.h"
 #include "display/lv_objx/lv_list.h"
+#include "okapi/api/chassis/model/threeEncoderSkidSteerModel.hpp"
+#include "okapi/api/odometry/stateMode.hpp"
+#include "okapi/api/units/QAngle.hpp"
+#include "okapi/api/units/QLength.hpp"
+#include "okapi/api/util/logging.hpp"
+#include "okapi/api/util/mathUtil.hpp"
+#include "okapi/impl/device/rotarysensor/rotationSensor.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <atomic>
@@ -15,34 +22,28 @@
 
 using namespace okapi::literals;
 okapi::Controller controller;
+auto logger = std::make_shared<okapi::Logger>(
+    okapi::TimeUtilFactory::createDefault().getTimer(), "/ser/sout",
+    okapi::Logger::LogLevel::debug);
 
 auto drive =
     okapi::ChassisControllerBuilder()
+        .withSensors(okapi::RotationSensor(18, true), okapi::RotationSensor(20),
+                     okapi::RotationSensor(19))
         .withMotors({-1, -9}, {3, 8})
         .withDimensions({okapi::AbstractMotor::gearset::blue, (36.0 / 60.0)},
-                        {{3.25_in, 14.5625_in}, okapi::imev5BlueTPR})
-        .build();
+                        {{3.25_in, 14.625_in}, okapi::imev5BlueTPR})
+        .withOdometry({{2.75_in, 9.0_in, 6.625_in, 2.75_in}, 360},
+                      okapi::StateMode::FRAME_TRANSFORMATION)
+        .withLogger(logger)
+        .buildOdometry();
+
+auto model{drive->getModel()};
+
+auto encModel{
+    std::static_pointer_cast<okapi::ThreeEncoderSkidSteerModel>(model)};
 
 void on_center_button() {}
-
-// display display(lv_scr_act());
-// auto baseScr = lv_scr_act();
-// auto navList = lv_list_create(baseScr, NULL);
-
-// auto graph = lv_chart_create(baseScr, NULL);
-
-// lv_res_t graphBtn(lv_obj_t*){
-//   lv_obj_set_hidden(graph, false);
-//   // lv_obj_set_hidden(autonSelector, true);
-//   return LV_RES_OK;
-// }
-// lv_res_t autonBtn(lv_obj_t*){
-//   lv_obj_set_hidden(graph, true);
-//   return LV_RES_OK;
-// }
-
-// static const char * autonMap[] = {"1", "2", ""};
-// std::map<const char *, std::size_t> autonMap = {};
 
 auto display = ui::getInstance();
 
@@ -50,21 +51,18 @@ void initialize() {
   // controller.clear();
 
   display->init();
-  // screen is 480 x 240 pixels
-  // lv_theme_set_current(lv_theme_night_init(266, &lv_font_dejavu_20));
 
-  // lv_obj_set_size(navList, 100, 240);
-  // lv_obj_align(navList, baseScr, LV_ALIGN_IN_TOP_LEFT, 0, 0);
-  // lv_list_add(navList, NULL, "Graph", graphBtn);
-  // lv_list_add(navList, NULL, "Auton", autonBtn);
+  display->setPosition({0_in, 0_in, 0_deg});
 
-  // lv_obj_set_hidden(graph, true);
-  // lv_obj_set_size(graph, 380, 240);
-  // lv_obj_align(graph, navList, LV_ALIGN_OUT_RIGHT_MID, 0, 0);
+  okapi::Logger::setDefaultLogger(logger);
 
-  // lv_btn_set_action(graphBtn, LV_BTN_ACTION_PR, [=]() {});
+  encModel->resetSensors();
 
-  // auto chart = lv_chart_create(graphScreen, NULL);
+  model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
+
+  pros::delay(500);
+
+  drive->setState({0_in, 0_in, 0_deg});
 }
 
 void disabled() {}
@@ -74,7 +72,7 @@ void competition_initialize() {}
 void autonomous() {}
 
 void opcontrol() {
-  auto model{drive->getModel()};
+  // auto model{drive->getModel()};
 
   pros::Task matchTimer{[&] {
     controller.rumble("-");       // Match start rumble
@@ -86,13 +84,13 @@ void opcontrol() {
     controller.rumble("-"); // Rumble on endgame start at 1:35
   }};
 
-  constexpr std::array<std::string_view, 3> driveModes = {"arcade", "curvature",
-                                                          "tank"};
+  constexpr std::array<std::string_view, 4> driveModes = {"arcade", "curvature",
+                                                          "tank", "vector"};
   std::atomic<std::size_t> driveMode = 0;
 
   pros::Task modeSwitcher{[&] {
     auto i = driveMode.load(); // For looping over driveModes
-    okapi::ControllerButton btn (okapi::ControllerDigital::Y);
+    okapi::ControllerButton btn(okapi::ControllerDigital::Y);
 
     controller.setText( // Set the initial drive mode text
         0, 0, std::string("mode: ").append(driveModes.at(driveMode.load())));
@@ -114,7 +112,7 @@ void opcontrol() {
           pros::delay(50);
         }
       } else {
-        std::cout << driveModes.at(driveMode.load()) << "\n";
+        // std::cout << driveModes.at(driveMode.load()) << "\n";
         pros::delay(50);
       }
     }
@@ -144,7 +142,14 @@ void opcontrol() {
     }
   }};
 
-  model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
+  // drive->setState({0_in, 0_in, 0_deg});
+
+  // model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
+
+  // auto encModel {
+  // std::static_pointer_cast<okapi::ThreeEncoderSkidSteerModel>(model) };
+
+  // drive->driveToPoint({3_ft, 0_ft});
 
   while (true) {
 
@@ -157,11 +162,23 @@ void opcontrol() {
       model->tank(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   controller.getAnalog(okapi::ControllerAnalog::rightY));
       break;
+    case 3:
+      model->driveVector(controller.getAnalog(okapi::ControllerAnalog::leftY),
+                         controller.getAnalog(okapi::ControllerAnalog::rightX));
+      break;
     default:
       model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                     controller.getAnalog(okapi::ControllerAnalog::rightX));
       break;
     }
+    // drive->setState({0_in, 0_in, 0_deg});
+
+    //std::cout << drive->getState().str(okapi::inch, okapi::degree) << "\n";
+    display->setPosition(drive->getState());
+    // for (auto value : encModel->getSensorVals()) {
+    //   std::cout << value << " ";
+    // }
+    // std::cout << "\n";
 
     pros::delay(10);
   }

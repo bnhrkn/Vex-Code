@@ -16,6 +16,8 @@ public:
 
   void init();
 
+  void setPosition(const okapi::OdomState &state);
+
  
 
 
@@ -32,5 +34,11 @@ protected:
   lv_obj_t *autonTab;
 
   lv_obj_t *settingTab;
+
+  lv_obj_t *logTab;
+  lv_obj_t *log;
+
+  lv_obj_t *positionTab;
+  lv_obj_t *positionLabel;
 
 }; // screen is 480 x 240 pixel
