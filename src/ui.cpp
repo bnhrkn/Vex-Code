@@ -52,9 +52,10 @@ void ui::init() {
 
 void ui::setPosition(const okapi::OdomState &state) {
   using namespace okapi::literals;
+  auto [x, y, yaw] = state;
   std::ostringstream out;
-  out << "X: " << state.x.convert(1_in) << 
-          "\"\nY: " << state.y.convert(1_in) <<
-          "\"\nYaw: " << state.theta.convert(1_deg) << "°";
+  out << "X: " << x.convert(1_in) << 
+          "\"\nY: " << y.convert(1_in) <<
+          "\"\nYaw: " << yaw.convert(1_deg) << "°";
   lv_label_set_text(positionLabel, out.str().c_str());
 }
