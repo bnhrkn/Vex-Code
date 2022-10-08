@@ -16,10 +16,10 @@
 #include "okapi/impl/util/timer.hpp"
 #endif
 
-#define LOG_DEBUG(msg) logger->debug([=]() { return msg; })
-#define LOG_INFO(msg) logger->info([=]() { return msg; })
-#define LOG_WARN(msg) logger->warn([=]() { return msg; })
-#define LOG_ERROR(msg) logger->error([=]() { return msg; })
+#define LOG_DEBUG(msg) logger->debug([=, *this]() { return msg; })
+#define LOG_INFO(msg) logger->info([=, *this]() { return msg; })
+#define LOG_WARN(msg) logger->warn([=, *this]() { return msg; })
+#define LOG_ERROR(msg) logger->error([=, *this]() { return msg; })
 
 #define LOG_DEBUG_S(msg) LOG_DEBUG(std::string(msg))
 #define LOG_INFO_S(msg) LOG_INFO(std::string(msg))
