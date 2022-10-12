@@ -12,9 +12,9 @@ BINDIR=$(ROOT)/bin
 SRCDIR=$(ROOT)/src
 INCDIR=$(ROOT)/include
 
-WARNFLAGS+=
+WARNFLAGS+= -Wextra -Wall -fanalyzer
 EXTRA_CFLAGS=
-EXTRA_CXXFLAGS=
+EXTRA_CXXFLAGS= -O3
 
 # Set to 1 to enable hot/cold linking
 USE_PACKAGE:=1
