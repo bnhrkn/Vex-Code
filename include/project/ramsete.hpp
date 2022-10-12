@@ -9,5 +9,5 @@ public:
   std::pair<double, double> step(const squiggles::Pose&, const squiggles::ProfilePoint&);
 
 protected:
-  double gain, zeta, b;
+  double b, zeta, gain;
 };
