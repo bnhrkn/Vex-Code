@@ -45,14 +45,12 @@ auto encModel{
 
 void on_center_button() {}
 
-auto display = ui::getInstance();
+auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
 void initialize() {
   // controller.clear();
 
-  display->init();
-
-  display->setPosition({0_in, 0_in, 0_deg});
+  display.setPosition({0_in, 0_in, 0_deg});
 
   okapi::Logger::setDefaultLogger(logger);
 
@@ -60,7 +58,7 @@ void initialize() {
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
 
-  pros::delay(500);
+  pros::delay(500); //There is a race condition somewhere
 
   drive->setState({0_in, 0_in, 0_deg});
 }
@@ -174,7 +172,7 @@ void opcontrol() {
     // drive->setState({0_in, 0_in, 0_deg});
 
     //std::cout << drive->getState().str(okapi::inch, okapi::degree) << "\n";
-    display->setPosition(drive->getState());
+    display.setPosition(drive->getState());
     // for (auto value : encModel->getSensorVals()) {
     //   std::cout << value << " ";
     // }

@@ -10,17 +10,9 @@
 #include <string>
 constexpr int hres = 240, vres = 240;
 
-ui::ui(){};
-
-std::shared_ptr<ui> ui::getInstance() {
-  static std::shared_ptr<ui> instance(new ui);
-  return instance;
-}
-
-void ui::init() {
+ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen) : homeScreen( ihomeScreen.release() ){ // Try to enforce an ownership transfer
   lv_theme_set_current(lv_theme_night_init(266, &lv_font_dejavu_20));
 
-  homeScreen = lv_scr_act();
   tabView = lv_tabview_create(homeScreen, NULL);
 
   autonTab = lv_tabview_add_tab(tabView, "Auto");
@@ -47,7 +39,23 @@ void ui::init() {
   lv_label_set_long_mode(positionLabel, LV_LABEL_LONG_BREAK);
   lv_obj_set_width(positionLabel, hres);
   //lv_obj_align(positionLabel, positionTab, LV_ALIGN_IN_TOP_LEFT, 0, 0);
+};
+ui::~ui(){
+  lv_obj_del(tabView);
 
+  lv_obj_del(graphTab);
+  lv_obj_del(chart);
+
+  lv_obj_del(autonTab);
+
+  lv_obj_del(settingTab);
+  lv_obj_del(settingTab);
+
+  lv_obj_del(logTab);
+  lv_obj_del(log);
+
+  lv_obj_del(positionTab);
+  lv_obj_del(positionLabel);
 }
 
 void ui::setPosition(const okapi::OdomState &state) {
