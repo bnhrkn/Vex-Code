@@ -2,6 +2,7 @@
 #include "display/lv_core/lv_obj.h"
 #include "main.h"
 #include <memory>
+//#include "auton.hpp"
 
 class ui {
 public:
@@ -21,6 +22,7 @@ protected:
   lv_obj_t* chart;
 
   lv_obj_t* autonTab;
+  lv_obj_t* autonRoller;
 
   lv_obj_t* settingTab;
 

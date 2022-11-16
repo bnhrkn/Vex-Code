@@ -10,66 +10,106 @@
 #include "okapi/api/util/logging.hpp"
 #include "okapi/api/util/mathUtil.hpp"
 #include "okapi/impl/device/rotarysensor/rotationSensor.hpp"
+//#include "project/auton.hpp"
+//#include "project/ramsete.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <atomic>
 #include <cstddef>
+#include <fstream>
 #include <functional>
 #include <map>
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 
 using namespace okapi::literals;
+
 okapi::Controller controller;
-auto logger = std::make_shared<okapi::Logger>(
-    okapi::TimeUtilFactory::createDefault().getTimer(), "/ser/sout",
-    okapi::Logger::LogLevel::debug);
 
-auto drive =
-    okapi::ChassisControllerBuilder()
-        .withSensors(okapi::RotationSensor(18, true), okapi::RotationSensor(20),
-                     okapi::RotationSensor(19))
-        .withMotors({-1, -9}, {3, 8})
-        .withDimensions({okapi::AbstractMotor::gearset::blue, (36.0 / 60.0)},
-                        {{3.25_in, 14.625_in}, okapi::imev5BlueTPR})
-        .withOdometry({{2.75_in, 9.0_in, 6.625_in, 2.75_in}, 360},
-                      okapi::StateMode::FRAME_TRANSFORMATION)
-        .withLogger(logger)
-        .buildOdometry();
+constinit const auto gearset = okapi::AbstractMotor::gearset::blue;
+constinit const auto encoderUnit = okapi::AbstractMotor::encoderUnits::counts;
+constinit const auto maxRPM = okapi::toUnderlyingType(gearset);
 
-auto model{drive->getModel()};
+std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
 
-auto encModel{
-    std::static_pointer_cast<okapi::ThreeEncoderSkidSteerModel>(model)};
+const auto odomScales =
+    okapi::ChassisScales({2.75_in, 9.0_in, 6.625_in, 2.75_in}, 360);
+
+const auto chassisScales =
+    okapi::ChassisScales({3.25_in, 14.625_in}, okapi::imev5BlueTPR);
+
+//auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
+
+std::array<std::vector<squiggles::ProfilePoint>, 2> paths;
+
+//auto autonMode = std::atomic<auton::AutonMode>(auton::AutonMode::disabled);
 
 void on_center_button() {}
 
-auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
-
 void initialize() {
-  // controller.clear();
+  const auto constraints = squiggles::Constraints(1.5, 2.5, 0.5);
+  auto generator = squiggles::SplineGenerator(
+      constraints, std::make_shared<squiggles::TankModel>(14.625, constraints));
 
-  display.setPosition({0_in, 0_in, 0_deg});
+  auto makeMotor = [](int iport, bool ireversed) {
+    return okapi::Motor(iport, ireversed, gearset, encoderUnit);
+  };
 
-  okapi::Logger::setDefaultLogger(logger);
+  model = std::make_shared<okapi::ThreeEncoderSkidSteerModel>(
+      std::make_shared<okapi::MotorGroup>(
+          okapi::MotorGroup{makeMotor(1, true), makeMotor(9, true)}),
+      std::make_shared<okapi::MotorGroup>(
+          okapi::MotorGroup{makeMotor(3, false), makeMotor(8, false)}),
 
-  encModel->resetSensors();
+      std::make_shared<okapi::RotationSensor>(18, true),
+      std::make_shared<okapi::RotationSensor>(20, false),
+      std::make_shared<okapi::RotationSensor>(19), maxRPM, 12000);
+
+  //display.setPosition({0_in, 0_in, 0_deg});
+
+  model->resetSensors();
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
 
-  pros::delay(500); //There is a race condition somewhere
+  pros::delay(
+      500); // There is a race condition somewhere, sensors fail to reset.
 
-  drive->setState({0_in, 0_in, 0_deg});
+  paths[0] = generator.generate({{0, 0, 0}, {1, 0, 0}});
+  paths[1] = generator.generate({{0, 0, 0}, {0, 1, 0}});
+
+  // drive->setState({0_in, 0_in, 0_deg});
 }
 
 void disabled() {}
 
 void competition_initialize() {}
 
-void autonomous() {}
+void autonomous() {
+  // auto odometry = okapi::ThreeEncoderOdometry(
+  //     okapi::TimeUtilFactory::createDefault(), model, odomScales);
+
+  // std::vector<squiggles::ProfilePoint> &path = paths[0];
+  // switch (autonMode.load()) {
+  //   using enum auton::AutonMode;
+  // case auton1:
+  //   path = paths[1];
+  //   break;
+  // default:
+  //   break;
+  // }
+
+  // for (auto point : path){
+  //   odometry.step();
+    
+  //   model->driveVector(double iySpeed, double izRotation)
+  // }
+}
 
 void opcontrol() {
+  auto odometry = okapi::ThreeEncoderOdometry(
+      okapi::TimeUtilFactory::createDefault(), model, odomScales);
   // auto model{drive->getModel()};
 
   pros::Task matchTimer{[&] {
@@ -149,6 +189,19 @@ void opcontrol() {
 
   // drive->driveToPoint({3_ft, 0_ft});
 
+  // auto csvfile = std::ofstream("/usd/data.csv", std::ios::out);
+  // const auto startTime = pros::millis();
+
+  // auto killBtn = okapi::ControllerButton(okapi::ControllerDigital::X);
+
+  // while (!killBtn.changedToPressed()) {
+
+  pros::Motor flywheel (4);
+  flywheel.move_voltage(12000);
+
+  pros::Motor intake (16);
+  intake.move_voltage(12000);
+  
   while (true) {
 
     switch (driveMode.load()) {
@@ -169,14 +222,10 @@ void opcontrol() {
                     controller.getAnalog(okapi::ControllerAnalog::rightX));
       break;
     }
-    // drive->setState({0_in, 0_in, 0_deg});
+    // odometry.step();
 
-    //std::cout << drive->getState().str(okapi::inch, okapi::degree) << "\n";
-    display.setPosition(drive->getState());
-    // for (auto value : encModel->getSensorVals()) {
-    //   std::cout << value << " ";
-    // }
-    // std::cout << "\n";
+    // csvfile << pros::millis() - startTime << "," <<
+    // odometry.getState().x.convert(okapi::meter) << "\n";
 
     pros::delay(10);
   }

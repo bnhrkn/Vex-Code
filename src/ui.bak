@@ -10,12 +10,24 @@
 #include <string>
 constexpr int hres = 240, vres = 240;
 
+lv_res_t rollerAction(lv_obj_t* obj){
+  
+}
+
+
+
+
 ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen) : homeScreen( ihomeScreen.release() ){ // Try to enforce an ownership transfer
   lv_theme_set_current(lv_theme_night_init(266, &lv_font_dejavu_20));
 
   tabView = lv_tabview_create(homeScreen, NULL);
 
   autonTab = lv_tabview_add_tab(tabView, "Auto");
+  autonRoller = lv_roller_create(autonTab, NULL);
+  lv_roller_set_options(autonRoller, "Disabled\nAuton 1\n");
+  lv_roller_set_action(autonRoller, rollerAction);
+  
+
 
 
 

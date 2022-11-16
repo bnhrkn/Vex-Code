@@ -1,0 +1,8 @@
+#pragma once
+
+namespace auton {
+enum class AutonMode {
+  disabled,
+  auton1,
+};
+}

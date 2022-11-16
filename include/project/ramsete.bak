@@ -1,0 +1,23 @@
+#pragma once
+#include "geometry/pose.hpp"
+#include "geometry/profilepoint.hpp"
+#include "main.h"
+
+// class RamseteController {
+// public:
+//   RamseteController(const double ib, const double izeta);
+//   std::pair<double, double> step(const squiggles::Pose &,
+//                                  const squiggles::ProfilePoint &);
+
+// protected:
+//   double b, zeta, gain;
+// };
+struct ChassisSpeeds;
+struct TankSpeeds;
+
+ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
+                      const squiggles::ProfilePoint &goalPoint, double b,
+                      double zeta);
+
+auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
+auto chassisToTankSpeeds(ChassisSpeeds speeds, okapi::ChassisScales scales) -> TankSpeeds;
