@@ -10,8 +10,8 @@
 #include "okapi/api/util/logging.hpp"
 #include "okapi/api/util/mathUtil.hpp"
 #include "okapi/impl/device/rotarysensor/rotationSensor.hpp"
-//#include "project/auton.hpp"
-//#include "project/ramsete.hpp"
+// #include "project/auton.hpp"
+// #include "project/ramsete.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <atomic>
@@ -40,11 +40,11 @@ const auto odomScales =
 const auto chassisScales =
     okapi::ChassisScales({3.25_in, 14.625_in}, okapi::imev5BlueTPR);
 
-//auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
+// auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
 std::array<std::vector<squiggles::ProfilePoint>, 2> paths;
 
-//auto autonMode = std::atomic<auton::AutonMode>(auton::AutonMode::disabled);
+// auto autonMode = std::atomic<auton::AutonMode>(auton::AutonMode::disabled);
 
 void on_center_button() {}
 
@@ -67,7 +67,7 @@ void initialize() {
       std::make_shared<okapi::RotationSensor>(20, false),
       std::make_shared<okapi::RotationSensor>(19), maxRPM, 12000);
 
-  //display.setPosition({0_in, 0_in, 0_deg});
+  // display.setPosition({0_in, 0_in, 0_deg});
 
   model->resetSensors();
 
@@ -102,7 +102,7 @@ void autonomous() {
 
   // for (auto point : path){
   //   odometry.step();
-    
+
   //   model->driveVector(double iySpeed, double izRotation)
   // }
 }
@@ -158,7 +158,7 @@ void opcontrol() {
 
   pros::Task trigger{[&] { // Task for the disc shooter trigger
     constexpr int burstShots = 3;
-    constexpr int shotDelay = 100;
+    constexpr int shotDelay = 200;
     pros::ADIDigitalOut cylinder(1, false);
     okapi::ControllerButton trigger(okapi::ControllerDigital::R2);
     int count = 0;
@@ -180,6 +180,56 @@ void opcontrol() {
     }
   }};
 
+  pros::Task intake{[&] {
+    pros::Motor intake(16);
+    okapi::ControllerButton intakeBtn(okapi::ControllerDigital::L2);
+    okapi::ControllerButton rollerBtn(okapi::ControllerDigital::L1);
+    okapi::ControllerButton reverse(okapi::ControllerDigital::left);
+    intake.set_gearing(pros::E_MOTOR_GEAR_BLUE);
+
+    enum class intakeMode {
+      fast,
+      slow,
+      off
+    };
+    auto mode = intakeMode::fast;
+    while (true) {
+      if(intakeBtn.changedToPressed()){
+        if(mode == intakeMode::fast){
+          mode = intakeMode::off;
+        }
+        else {
+          mode = intakeMode::fast;
+        }
+      }
+      else if (rollerBtn.changedToPressed()){
+        if(mode == intakeMode::slow){
+          mode = intakeMode::off;
+        }
+        else {
+          mode = intakeMode::slow;
+        }
+      }
+
+      if(reverse.isPressed()){
+        intake.move_velocity(-600);
+      }
+      else{
+        switch(mode){
+          case intakeMode::fast: intake.move_velocity(600); break;
+          case intakeMode::slow: intake.move_velocity(200); break;
+          default: intake.move_velocity(0);
+        }
+      }
+      pros::delay(20);
+      
+    }
+  }};
+
+  pros::Task tilter ([=]{
+    
+  });
+
   // drive->setState({0_in, 0_in, 0_deg});
 
   // model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
@@ -196,12 +246,9 @@ void opcontrol() {
 
   // while (!killBtn.changedToPressed()) {
 
-  pros::Motor flywheel (4);
+  pros::Motor flywheel(4);
   flywheel.move_voltage(12000);
 
-  pros::Motor intake (16);
-  intake.move_voltage(12000);
-  
   while (true) {
 
     switch (driveMode.load()) {
@@ -222,11 +269,6 @@ void opcontrol() {
                     controller.getAnalog(okapi::ControllerAnalog::rightX));
       break;
     }
-    // odometry.step();
-
-    // csvfile << pros::millis() - startTime << "," <<
-    // odometry.getState().x.convert(okapi::meter) << "\n";
-
     pros::delay(10);
   }
 }
