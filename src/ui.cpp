@@ -10,33 +10,25 @@
 #include <string>
 constexpr int hres = 240, vres = 240;
 
-lv_res_t rollerAction(lv_obj_t* obj){
-  
-}
+lv_res_t rollerAction(lv_obj_t *obj) {}
 
-
-
-
-ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen) : homeScreen( ihomeScreen.release() ){ // Try to enforce an ownership transfer
+ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
+    : homeScreen(
+          ihomeScreen.release()) { // Try to enforce an ownership transfer
   lv_theme_set_current(lv_theme_night_init(266, &lv_font_dejavu_20));
 
   tabView = lv_tabview_create(homeScreen, NULL);
 
   autonTab = lv_tabview_add_tab(tabView, "Auto");
   autonRoller = lv_roller_create(autonTab, NULL);
+  
   lv_roller_set_options(autonRoller, "Disabled\nAuton 1\n");
   lv_roller_set_action(autonRoller, rollerAction);
-  
-
-
-
 
   graphTab = lv_tabview_add_tab(tabView, "Graph");
   chart = lv_chart_create(graphTab, NULL);
   lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
   lv_obj_set_size(chart, 460, 161);
-  
-
 
   settingTab = lv_tabview_add_tab(tabView, "Settings");
 
@@ -44,21 +36,22 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen) : homeScreen( ihomeScreen.release(
   log = lv_label_create(logTab, NULL);
   lv_label_set_long_mode(log, LV_LABEL_LONG_BREAK);
   lv_obj_set_width(log, hres);
-  //lv_label_set_text(lv_obj_t *label, const char *text) // log output
+  // lv_label_set_text(lv_obj_t *label, const char *text) // log output
 
   positionTab = lv_tabview_add_tab(tabView, "Position");
   positionLabel = lv_label_create(positionTab, NULL);
   lv_label_set_long_mode(positionLabel, LV_LABEL_LONG_BREAK);
   lv_obj_set_width(positionLabel, hres);
-  //lv_obj_align(positionLabel, positionTab, LV_ALIGN_IN_TOP_LEFT, 0, 0);
+  // lv_obj_align(positionLabel, positionTab, LV_ALIGN_IN_TOP_LEFT, 0, 0);
 };
-ui::~ui(){
+ui::~ui() {
   lv_obj_del(tabView);
 
   lv_obj_del(graphTab);
   lv_obj_del(chart);
 
   lv_obj_del(autonTab);
+  lv_obj_del(autonRoller);
 
   lv_obj_del(settingTab);
   lv_obj_del(settingTab);
@@ -74,8 +67,10 @@ void ui::setPosition(const okapi::OdomState &state) {
   using namespace okapi::literals;
   auto [x, y, yaw] = state;
   std::ostringstream out;
-  out << "X: " << x.convert(1_in) << 
-          "\"\nY: " << y.convert(1_in) <<
-          "\"\nYaw: " << yaw.convert(1_deg) << "°";
+  out << "X: " << x.convert(1_in) << "\"\nY: " << y.convert(1_in)
+      << "\"\nYaw: " << yaw.convert(1_deg) << "°";
   lv_label_set_text(positionLabel, out.str().c_str());
+}
+int ui::getAuton() {
+  return lv_roller_get_selected(autonRoller);
 }

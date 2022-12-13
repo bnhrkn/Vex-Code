@@ -2,13 +2,14 @@
 #include "display/lv_core/lv_obj.h"
 #include "main.h"
 #include <memory>
-//#include "auton.hpp"
+
 
 class ui {
 public:
   ui(std::unique_ptr<lv_obj_t> ihomeScreen);
    ~ui();
   void setPosition(const okapi::OdomState &state);
+  int getAuton();
 
  
 

@@ -12,8 +12,13 @@
 // protected:
 //   double b, zeta, gain;
 // };
-struct ChassisSpeeds;
-struct TankSpeeds;
+struct ChassisSpeeds {
+  okapi::QSpeed linearVel;
+  okapi::QAngularSpeed angularVel;
+};
+struct TankSpeeds {
+  okapi::QAngularSpeed left, right;
+};
 
 ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
                       const squiggles::ProfilePoint &goalPoint, double b,
