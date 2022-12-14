@@ -10,6 +10,7 @@ public:
    ~ui();
   void setPosition(const okapi::OdomState &state);
   int getAuton();
+  bool isBlueTeam();
 
  
 
@@ -24,6 +25,7 @@ protected:
 
   lv_obj_t* autonTab;
   lv_obj_t* autonRoller;
+  lv_obj_t* colorRoller;
 
   lv_obj_t* settingTab;
 

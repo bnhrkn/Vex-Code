@@ -10,8 +10,6 @@
 #include <string>
 constexpr int hres = 240, vres = 240;
 
-lv_res_t rollerAction(lv_obj_t *obj) {}
-
 ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
     : homeScreen(
           ihomeScreen.release()) { // Try to enforce an ownership transfer
@@ -23,8 +21,11 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   autonRoller = lv_roller_create(autonTab, NULL);
   
   lv_roller_set_options(autonRoller, "Disabled\nAuton 1\n");
-  lv_roller_set_action(autonRoller, rollerAction);
+  lv_roller_set_action(autonRoller, NULL);
 
+  colorRoller = lv_roller_create(autonTab, NULL);
+  lv_roller_set_options(colorRoller, "Blue\nRed\n");
+  
   graphTab = lv_tabview_add_tab(tabView, "Graph");
   chart = lv_chart_create(graphTab, NULL);
   lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
@@ -52,6 +53,7 @@ ui::~ui() {
 
   lv_obj_del(autonTab);
   lv_obj_del(autonRoller);
+  lv_obj_del(colorRoller);
 
   lv_obj_del(settingTab);
   lv_obj_del(settingTab);
@@ -73,4 +75,7 @@ void ui::setPosition(const okapi::OdomState &state) {
 }
 int ui::getAuton() {
   return lv_roller_get_selected(autonRoller);
+}
+bool ui::isBlueTeam(){
+  return !static_cast<bool>(lv_roller_get_selected(colorRoller));
 }
