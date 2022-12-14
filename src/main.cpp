@@ -96,12 +96,15 @@ void autonomous() {
     path = paths[0];
   }
 
-  for (auto point : path) {
+  for (auto iter = path.cbegin(); iter < path.cend(); ++iter) {
     odometry.step();
     const auto speeds =
-        ramsete(stateToPose(odometry.getState()), point, 2.0, 0.7);
+        ramsete(stateToPose(odometry.getState()), *iter, 2.0, 0.7);
     const auto [left, right] = chassisToTankSpeeds(speeds, chassisScales);
     model->tank(left.convert(1_rpm), right.convert(1_rpm));
+    if (iter++ != path.cend()) {
+      pros::delay(iter++->time * 1000 - iter->time * 1000);
+    }
   }
 }
 
@@ -113,50 +116,12 @@ void opcontrol() {
   pros::Task matchTimer{[&] {
     okapi::ControllerButton expand(okapi::ControllerDigital::right);
     pros::ADIDigitalOut cylinder(3, false);
-    controller.rumble("-");       // Match start rumble
-    pros::delay(90000);           // Delay until 1:30
-    for (int i = 0; i < 5; i++) { // Rumble countdown from 1:30 to 1:34
-      controller.rumble(".");
-      pros::delay(1000);
-    }
+    controller.rumble("-"); // Match start rumble
+    pros::delay(95000);     // Delay until 1:35
     controller.rumble("-"); // Rumble on endgame start at 1:35
     while (true) {
       if (expand.changedToPressed()) {
         cylinder.set_value(true);
-      }
-    }
-  }};
-
-  constexpr std::array<std::string_view, 4> driveModes = {"arcade", "curvature",
-                                                          "tank", "vector"};
-  std::atomic<std::size_t> driveMode = 0;
-
-  pros::Task modeSwitcher{[&] {
-    auto i = driveMode.load(); // For looping over driveModes
-    okapi::ControllerButton btn(okapi::ControllerDigital::Y);
-
-    controller.setText( // Set the initial drive mode text
-        0, 0, std::string("mode: ").append(driveModes.at(driveMode.load())));
-
-    while (true) {
-      if (btn.isPressed()) {
-        driveMode = i;
-        controller.setText(0, 0,
-                           std::string("mode: ")
-                               .append(driveModes.at(driveMode.load()))
-                               .append(std::string_view("          ")));
-        if (i + 1 < driveModes.size()) {
-          i++;
-        } else {
-          i = 0;
-        }
-        int delay = 600;
-        for (int i = 0; i < delay && btn.isPressed(); i += 50) {
-          pros::delay(50);
-        }
-      } else {
-        // std::cout << driveModes.at(driveMode.load()) << "\n";
-        pros::delay(50);
       }
     }
   }};
@@ -187,10 +152,14 @@ void opcontrol() {
 
   pros::Task intake{[&] {
     pros::Motor intake(-9);
+    pros::Optical colorSensor(12);
+    colorSensor.set_led_pwm(255);
+
     okapi::ControllerButton intakeBtn(okapi::ControllerDigital::L2);
     okapi::ControllerButton rollerBtn(okapi::ControllerDigital::L1);
     okapi::ControllerButton reverse(okapi::ControllerDigital::left);
     intake.set_gearing(pros::E_MOTOR_GEAR_BLUE);
+    int hueMin = 220, hueMax = 240, proximityMin = 200;
 
     enum class intakeMode { fast, slow, off };
     auto mode = intakeMode::fast;
@@ -208,18 +177,23 @@ void opcontrol() {
           mode = intakeMode::slow;
         }
       }
-
-      if (reverse.isPressed()) {
-        intake.move_velocity(-600);
-      } else {
-        switch (mode) {
-        case intakeMode::fast:
-          intake.move_velocity(600);
-          break;
-        case intakeMode::slow:
+      std::cout << colorSensor.get_proximity() << "\n";
+      if (colorSensor.get_proximity() >= proximityMin &&
+          mode != intakeMode::off) {
+        if (colorSensor.get_hue() >= hueMin &&
+            colorSensor.get_hue() <= hueMax) {
+          intake.move_velocity(0);
+        } else {
           intake.move_velocity(200);
-          break;
-        default:
+        }
+      } else {
+        if (reverse.isPressed()) {
+          intake.move_velocity(-600);
+        } else if (mode == intakeMode::fast) {
+          intake.move_velocity(600);
+        } else if (mode == intakeMode::slow) {
+          intake.move_velocity(200);
+        } else {
           intake.move_velocity(0);
         }
       }
@@ -249,44 +223,10 @@ void opcontrol() {
     }
   });
 
-  // drive->setState({0_in, 0_in, 0_deg});
-
-  // model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
-
-  // auto encModel {
-  // std::static_pointer_cast<okapi::ThreeEncoderSkidSteerModel>(model) };
-
-  // drive->driveToPoint({3_ft, 0_ft});
-
-  // auto csvfile = std::ofstream("/usd/data.csv", std::ios::out);
-  // const auto startTime = pros::millis();
-
-  // auto killBtn = okapi::ControllerButton(okapi::ControllerDigital::X);
-
-  // while (!killBtn.changedToPressed())
-  pros::Distance sensor{12};
-
   while (true) {
-
-    std::cout << "Distance: " << sensor.get() << "\n";
-    // switch (driveMode.load()) {
-    // case 1:
-    //   model->curvature(controller.getAnalog(okapi::ControllerAnalog::leftY),
-    //                    controller.getAnalog(okapi::ControllerAnalog::rightX));
-    //   break;
-    // case 2:
-    //   model->tank(controller.getAnalog(okapi::ControllerAnalog::leftY),
-    //               controller.getAnalog(okapi::ControllerAnalog::rightY));
-    //   break;
-    // case 3:
-    //   model->driveVector(controller.getAnalog(okapi::ControllerAnalog::leftY),
-    //                      controller.getAnalog(okapi::ControllerAnalog::rightX));
-    //   break;
-    // default:
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   controller.getAnalog(okapi::ControllerAnalog::rightX));
-    //   break;
-    // }
+
     pros::delay(10);
   }
 }
