@@ -70,7 +70,7 @@ void initialize() {
 
   model->resetSensors();
 
-  model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
+  model->setBrakeMode(okapi::AbstractMotor::brakeMode::coast);
 
   pros::delay(
       500); // There is a race condition somewhere, sensors fail to reset.
@@ -151,17 +151,22 @@ void opcontrol() {
   }};
 
   pros::Task intake{[&] {
-    pros::Motor intake(-9);
+    pros::Motor intake(-20);
     pros::Optical colorSensor(12);
     colorSensor.set_led_pwm(255);
 
     okapi::ControllerButton intakeBtn(okapi::ControllerDigital::L2);
-    okapi::ControllerButton rollerBtn(okapi::ControllerDigital::L1);
     okapi::ControllerButton reverse(okapi::ControllerDigital::left);
-    intake.set_gearing(pros::E_MOTOR_GEAR_BLUE);
-    int hueMin = 220, hueMax = 240, proximityMin = 200;
+    intake.set_gearing(pros::E_MOTOR_GEAR_GREEN);
+    auto [hueMin, hueMax] = [&]() -> std::pair<int, int> {
+      if (display.isBlueTeam()) {
+        return {220, 240}; // Blue Path
+      } else {
+        return {0, 25}; // Red Path
+      }
+    }();
 
-    enum class intakeMode { fast, slow, off };
+    enum class intakeMode { fast, off };
     auto mode = intakeMode::fast;
     while (true) {
       if (intakeBtn.changedToPressed()) {
@@ -170,31 +175,17 @@ void opcontrol() {
         } else {
           mode = intakeMode::fast;
         }
-      } else if (rollerBtn.changedToPressed()) {
-        if (mode == intakeMode::slow) {
-          mode = intakeMode::off;
-        } else {
-          mode = intakeMode::slow;
-        }
       }
-      std::cout << colorSensor.get_proximity() << "\n";
-      if (colorSensor.get_proximity() >= proximityMin &&
-          mode != intakeMode::off) {
-        if (colorSensor.get_hue() >= hueMin &&
-            colorSensor.get_hue() <= hueMax) {
-          intake.move_velocity(0);
-        } else {
-          intake.move_velocity(200);
-        }
+
+      if (colorSensor.get_hue() >= hueMin && colorSensor.get_hue() <= hueMax) {
+        intake.move_velocity(0);
       } else {
         if (reverse.isPressed()) {
-          intake.move_velocity(-600);
-        } else if (mode == intakeMode::fast) {
-          intake.move_velocity(600);
-        } else if (mode == intakeMode::slow) {
-          intake.move_velocity(200);
-        } else {
+          intake.move_velocity(-200);
+        } else if (mode == intakeMode::off) {
           intake.move_velocity(0);
+        } else {
+          intake.move_velocity(200);
         }
       }
       pros::delay(20);
@@ -225,7 +216,7 @@ void opcontrol() {
 
   while (true) {
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
-                  controller.getAnalog(okapi::ControllerAnalog::rightX));
+                  -controller.getAnalog(okapi::ControllerAnalog::rightX));
 
     pros::delay(10);
   }
