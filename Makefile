@@ -12,7 +12,7 @@ BINDIR=$(ROOT)/bin
 SRCDIR=$(ROOT)/src
 INCDIR=$(ROOT)/include
 
-WARNFLAGS+= -Wextra -Wall #-fanalyzer
+WARNFLAGS+= -Wextra -Wall -Wno-implicit-fallthrough #-fanalyzer
 EXTRA_CFLAGS=
 EXTRA_CXXFLAGS= -O3
 
