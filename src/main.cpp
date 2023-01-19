@@ -1,24 +1,15 @@
 #include "main.h"
-#include "display/lv_core/lv_obj.h"
-#include "display/lv_objx/lv_btn.h"
-#include "display/lv_objx/lv_chart.h"
-#include "display/lv_objx/lv_list.h"
-#include "okapi/api/chassis/model/threeEncoderSkidSteerModel.hpp"
-#include "okapi/api/odometry/stateMode.hpp"
-#include "okapi/api/units/QAngle.hpp"
-#include "okapi/api/units/QLength.hpp"
-#include "okapi/api/util/logging.hpp"
-#include "okapi/api/util/mathUtil.hpp"
-#include "okapi/impl/device/rotarysensor/rotationSensor.hpp"
 #include "project/ramsete.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
-#include <fstream>
 #include <functional>
+#include <iostream>
 #include <map>
 #include <memory>
+#include <numbers>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -34,16 +25,39 @@ constinit const auto maxRPM = okapi::toUnderlyingType(gearset);
 std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
 
 const auto odomScales =
-    okapi::ChassisScales({2.75_in, 9.0_in, 6.625_in, 2.75_in}, 360);
+    okapi::ChassisScales({2.80_in, 7.625_in, 4.50_in, 2.75_in}, 360);
 
 const auto chassisScales =
-    okapi::ChassisScales({3.25_in, 14.625_in}, okapi::imev5BlueTPR);
+    okapi::ChassisScales({3.25_in, 12.75_in}, okapi::imev5BlueTPR);
 
 auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
-std::array<std::vector<squiggles::ProfilePoint>, 2> paths;
+using SquigglesPath = std::vector<squiggles::ProfilePoint>;
+
+std::array<SquigglesPath, 2> paths;
 
 // auto autonMode = std::atomic<auton::AutonMode>(auton::AutonMode::disabled);
+
+void runPath(std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model,
+             okapi::ThreeEncoderOdometry &odometry, SquigglesPath &path) {
+  auto now = pros::millis();
+  // double prevTime = 0;
+  for (auto &point : path) {
+    // std::cout << "Current ms: " << now
+    //           << "    Delta ms: " << point.time * 1000 - prevTime <<
+    //           std::endl;
+
+    pros::delay(10);
+    odometry.step();
+    const auto speeds =
+        ramsete(stateToPose(odometry.getState()), point, 2.0, 0.7);
+    const auto [left, right] = chassisToTankSpeeds(speeds, chassisScales);
+    // model->tank(left.convert(1_rpm), right.convert(1_rpm));
+    model->left(left.convert(1_rpm));
+    model->right(right.convert(1_rpm));
+    pros::Task::delay_until(&now, 100);
+  }
+}
 
 void on_center_button() {}
 
@@ -55,57 +69,46 @@ void initialize() {
   auto makeMotor = [](int iport, bool ireversed) {
     return okapi::Motor(iport, ireversed, gearset, encoderUnit);
   };
+  std::ranges::for_each(std::array{14, 7, 6}, pros::c::rotation_reset_position);
 
   model = std::make_shared<okapi::ThreeEncoderSkidSteerModel>(
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
-          makeMotor(1, false), makeMotor(3, true), makeMotor(4, false)}),
+          makeMotor(1, false), makeMotor(2, true), makeMotor(3, false)}),
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
-          makeMotor(5, true), makeMotor(6, false), makeMotor(7, true)}),
+          makeMotor(11, true), makeMotor(12, false), makeMotor(17, true)}),
 
-      std::make_shared<okapi::RotationSensor>(18, true),
-      std::make_shared<okapi::RotationSensor>(20, false),
-      std::make_shared<okapi::RotationSensor>(19), maxRPM, 12000);
+      std::make_shared<okapi::RotationSensor>(14, true),          // left
+      std::make_shared<okapi::RotationSensor>(7, false),          // right
+      std::make_shared<okapi::RotationSensor>(6), maxRPM, 12000); // middle
 
   // display.setPosition({0_in, 0_in, 0_deg});
 
   model->resetSensors();
 
-  model->setBrakeMode(okapi::AbstractMotor::brakeMode::coast);
+  model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
 
   pros::delay(
       500); // There is a race condition somewhere, sensors fail to reset.
 
   paths[0] = std::vector<squiggles::ProfilePoint>();
-  paths[1] = generator.generate({{0, 0, 0}, {0, 1, 0}});
+  paths[1] = generator.generate({{0.0, 0.0, 0}, {0.0, 0.609, 0.0}});
+  for (auto point : paths[1]){
+    std::cout << point.vector.pose.x << ", " << point.vector.pose.y << "," << point.vector.pose.yaw << std::endl;
+  }
+  // paths[2] = generator.generate({{0.915, 0.2032, std::numbers::pi},
+  // {0.915,0.304, std::numbers::pi/4},{} });
 
   // drive->setState({0_in, 0_in, 0_deg});
 }
 
-void disabled() {}
+void disabled() { model->stop(); }
 
 void competition_initialize() {}
 
 void autonomous() {
   auto odometry = okapi::ThreeEncoderOdometry(
       okapi::TimeUtilFactory::createDefault(), model, odomScales);
-
-  std::vector<squiggles::ProfilePoint> &path = paths[0];
-  try {
-    path = paths.at(display.getAuton());
-  } catch (const std::out_of_range &e) {
-    path = paths[0];
-  }
-
-  for (auto iter = path.cbegin(); iter < path.cend(); ++iter) {
-    odometry.step();
-    const auto speeds =
-        ramsete(stateToPose(odometry.getState()), *iter, 2.0, 0.7);
-    const auto [left, right] = chassisToTankSpeeds(speeds, chassisScales);
-    model->tank(left.convert(1_rpm), right.convert(1_rpm));
-    if (iter++ != path.cend()) {
-      pros::delay(iter++->time * 1000 - iter->time * 1000);
-    }
-  }
+  runPath(model, odometry, paths[1]);
 }
 
 void opcontrol() {
@@ -151,7 +154,7 @@ void opcontrol() {
   }};
 
   pros::Task intake{[&] {
-    pros::Motor intake(-20);
+    pros::Motor intake(-4);
     pros::Optical colorSensor(12);
     colorSensor.set_led_pwm(255);
 
@@ -198,17 +201,17 @@ void opcontrol() {
     flywheel.move_velocity(600);
     okapi::ControllerButton up(okapi::ControllerDigital::X);
     okapi::ControllerButton down(okapi::ControllerDigital::B);
-    pros::ADIDigitalOut cyl(2, false);
+    pros::ADIDigitalOut cyl(2, true);
     bool high = true;
     while (true) {
       if (up.changedToPressed() && !high) {
         high = true;
         flywheel.move_velocity(600);
-        cyl.set_value(false);
+        cyl.set_value(true);
       } else if (down.changedToPressed() && high) {
         high = false;
         flywheel.move_velocity(600 * 0.7);
-        cyl.set_value(true);
+        cyl.set_value(false);
       }
       pros::delay(20);
     }
