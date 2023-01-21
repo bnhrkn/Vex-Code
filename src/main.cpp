@@ -112,6 +112,7 @@ void autonomous() {
 }
 
 void opcontrol() {
+  using std::literals::string_literals::operator""s;
   auto odometry = okapi::ThreeEncoderOdometry(
       okapi::TimeUtilFactory::createDefault(), model, odomScales);
   // auto model{drive->getModel()};
@@ -119,9 +120,9 @@ void opcontrol() {
   pros::Task matchTimer{[&] {
     okapi::ControllerButton expand(okapi::ControllerDigital::right);
     pros::ADIDigitalOut cylinder(3, false);
-    controller.rumble("-"); // Match start rumble
+    controller.rumble("-"s); // Match start rumble
     pros::delay(95000);     // Delay until 1:35
-    controller.rumble("-"); // Rumble on endgame start at 1:35
+    controller.rumble("-"s); // Rumble on endgame start at 1:35
     while (true) {
       if (expand.changedToPressed()) {
         cylinder.set_value(true);
@@ -198,7 +199,7 @@ void opcontrol() {
   pros::Task tilter([=] {
     pros::Motor flywheel(8);
     flywheel.set_gearing(pros::E_MOTOR_GEAR_BLUE);
-    flywheel.move_velocity(600);
+    flywheel.move_velocity(600*0.80); //0.87 far shot normal 42 deg / 30 deg
     okapi::ControllerButton up(okapi::ControllerDigital::X);
     okapi::ControllerButton down(okapi::ControllerDigital::B);
     pros::ADIDigitalOut cyl(2, true);
@@ -206,7 +207,7 @@ void opcontrol() {
     while (true) {
       if (up.changedToPressed() && !high) {
         high = true;
-        flywheel.move_velocity(600);
+        flywheel.move_velocity(600 * 0.80);
         cyl.set_value(true);
       } else if (down.changedToPressed() && high) {
         high = false;
