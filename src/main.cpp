@@ -18,11 +18,8 @@ using namespace okapi::literals;
 
 okapi::Controller controller;
 
-constinit const auto gearset = okapi::AbstractMotor::gearset::blue;
-constinit const auto encoderUnit = okapi::AbstractMotor::encoderUnits::counts;
-constinit const auto maxRPM = okapi::toUnderlyingType(gearset);
-
-std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
+std::shared_ptr<okapi::OdomChassisController> chassis;
+std::shared_ptr<okapi::ChassisModel> model;
 
 const auto odomScales =
     okapi::ChassisScales({2.80_in, 7.625_in, 4.50_in, 2.75_in}, 360);
@@ -32,73 +29,33 @@ const auto chassisScales =
 
 auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
-using SquigglesPath = std::vector<squiggles::ProfilePoint>;
-
-std::array<SquigglesPath, 2> paths;
-
-// auto autonMode = std::atomic<auton::AutonMode>(auton::AutonMode::disabled);
-
-void runPath(std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model,
-             okapi::ThreeEncoderOdometry &odometry, SquigglesPath &path) {
-  auto now = pros::millis();
-  // double prevTime = 0;
-  for (auto &point : path) {
-    // std::cout << "Current ms: " << now
-    //           << "    Delta ms: " << point.time * 1000 - prevTime <<
-    //           std::endl;
-
-    pros::delay(10);
-    odometry.step();
-    const auto speeds =
-        ramsete(stateToPose(odometry.getState()), point, 2.0, 0.7);
-    const auto [left, right] = chassisToTankSpeeds(speeds, chassisScales);
-    // model->tank(left.convert(1_rpm), right.convert(1_rpm));
-    model->left(left.convert(1_rpm));
-    model->right(right.convert(1_rpm));
-    pros::Task::delay_until(&now, 100);
-  }
-}
-
 void on_center_button() {}
 
 void initialize() {
-  const auto constraints = squiggles::Constraints(1.5, 2.5, 0.5);
-  auto generator = squiggles::SplineGenerator(
-      constraints, std::make_shared<squiggles::TankModel>(14.625, constraints));
+  std::ranges::for_each(
+      std::array{14, 7, 6},
+      pros::c::rotation_reset_position); // reset all rotation sensors to 0
+  chassis =
+      okapi::ChassisControllerBuilder()
+          .withMotors({1, -2, 3}, {-11, 12, -17})
+          .withGains({0.001, 0, 0.0001}, // Distance controller gains
+                     {0.001, 0, 0.0001}, // Turn controller gains
+                     {0.001, 0, 0.0001})
+          .withDimensions(okapi::AbstractMotor::GearsetRatioPair(
+                              okapi::AbstractMotor::gearset::blue, 36 / 60.0),
+                          chassisScales)
+          .withSensors(okapi::RotationSensor(14, true),
+                       okapi::RotationSensor(7, false),
+                       okapi::RotationSensor(6, false))
+          .withOdometry()
+          .buildOdometry();
 
-  auto makeMotor = [](int iport, bool ireversed) {
-    return okapi::Motor(iport, ireversed, gearset, encoderUnit);
-  };
-  std::ranges::for_each(std::array{14, 7, 6}, pros::c::rotation_reset_position);
-
-  model = std::make_shared<okapi::ThreeEncoderSkidSteerModel>(
-      std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
-          makeMotor(1, false), makeMotor(2, true), makeMotor(3, false)}),
-      std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
-          makeMotor(11, true), makeMotor(12, false), makeMotor(17, true)}),
-
-      std::make_shared<okapi::RotationSensor>(14, true),          // left
-      std::make_shared<okapi::RotationSensor>(7, false),          // right
-      std::make_shared<okapi::RotationSensor>(6), maxRPM, 12000); // middle
-
-  // display.setPosition({0_in, 0_in, 0_deg});
-
-  model->resetSensors();
+  chassis->setState({0_in,0_in,90_deg});
+  model = chassis->getModel();
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
 
-  pros::delay(
-      500); // There is a race condition somewhere, sensors fail to reset.
-
-  paths[0] = std::vector<squiggles::ProfilePoint>();
-  paths[1] = generator.generate({{0.0, 0.0, 0}, {0.0, 0.609, 0.0}});
-  for (auto point : paths[1]){
-    std::cout << point.vector.pose.x << ", " << point.vector.pose.y << "," << point.vector.pose.yaw << std::endl;
-  }
-  // paths[2] = generator.generate({{0.915, 0.2032, std::numbers::pi},
-  // {0.915,0.304, std::numbers::pi/4},{} });
-
-  // drive->setState({0_in, 0_in, 0_deg});
+  pros::delay(500); // Legacy? race condition?
 }
 
 void disabled() { model->stop(); }
@@ -106,22 +63,18 @@ void disabled() { model->stop(); }
 void competition_initialize() {}
 
 void autonomous() {
-  auto odometry = okapi::ThreeEncoderOdometry(
-      okapi::TimeUtilFactory::createDefault(), model, odomScales);
-  runPath(model, odometry, paths[1]);
+  chassis->turnToPoint({24_in, 24_in});
 }
 
 void opcontrol() {
+  chassis->stop();
   using std::literals::string_literals::operator""s;
-  auto odometry = okapi::ThreeEncoderOdometry(
-      okapi::TimeUtilFactory::createDefault(), model, odomScales);
-  // auto model{drive->getModel()};
 
   pros::Task matchTimer{[&] {
     okapi::ControllerButton expand(okapi::ControllerDigital::right);
     pros::ADIDigitalOut cylinder(3, false);
     controller.rumble("-"s); // Match start rumble
-    pros::delay(95000);     // Delay until 1:35
+    pros::delay(95000);      // Delay until 1:35
     controller.rumble("-"s); // Rumble on endgame start at 1:35
     while (true) {
       if (expand.changedToPressed()) {
@@ -199,7 +152,7 @@ void opcontrol() {
   pros::Task tilter([=] {
     pros::Motor flywheel(8);
     flywheel.set_gearing(pros::E_MOTOR_GEAR_BLUE);
-    flywheel.move_velocity(600*0.80); //0.87 far shot normal 42 deg / 30 deg
+    flywheel.move_velocity(600 * 0.80); // 0.87 far shot normal 42 deg / 30 deg
     okapi::ControllerButton up(okapi::ControllerDigital::X);
     okapi::ControllerButton down(okapi::ControllerDigital::B);
     pros::ADIDigitalOut cyl(2, true);
@@ -221,6 +174,7 @@ void opcontrol() {
   while (true) {
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   -controller.getAnalog(okapi::ControllerAnalog::rightX));
+    display.setPosition(chassis->getState());
 
     pros::delay(10);
   }
