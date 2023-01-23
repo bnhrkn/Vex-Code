@@ -87,8 +87,6 @@ void initialize() {
       std::make_shared<okapi::RotationSensor>(7, false),          // right
       std::make_shared<okapi::RotationSensor>(6), maxRPM, 12000); // middle
 
-  // display.setPosition({0_in, 0_in, 0_deg});
-
   model->resetSensors();
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
