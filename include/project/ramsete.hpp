@@ -25,4 +25,4 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
                       double zeta);
 
 auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
-auto chassisToTankSpeeds(ChassisSpeeds speeds, okapi::ChassisScales scales) -> TankSpeeds;
+auto chassisToTankSpeeds(const ChassisSpeeds speeds, const okapi::ChassisScales scales, const okapi::AbstractMotor::GearsetRatioPair) -> TankSpeeds;

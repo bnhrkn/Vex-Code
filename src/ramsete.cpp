@@ -35,10 +35,6 @@
 //   return {outLinearVel, outRotationVel};
 // }
 
-
-
-
-
 ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
                       const squiggles::ProfilePoint &goalPoint, double b,
                       double zeta) {
@@ -71,7 +67,8 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
     }
   }();
 
-  return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
+  // return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
+  return {goalPoint.vector.vel * okapi::mps, rotationVel * okapi::radps};
 }
 
 auto stateToPose(okapi::OdomState state) -> squiggles::Pose {
@@ -80,19 +77,23 @@ auto stateToPose(okapi::OdomState state) -> squiggles::Pose {
                          state.theta.convert(okapi::radian));
 }
 
-auto chassisToTankSpeeds(ChassisSpeeds speeds, okapi::ChassisScales scales)
+auto chassisToTankSpeeds(ChassisSpeeds speeds,
+                         const okapi::ChassisScales scales,
+                         const okapi::AbstractMotor::GearsetRatioPair ratio)
     -> TankSpeeds {
   using namespace okapi::literals;
 
   okapi::QAngularSpeed leftSpeed =
-      (speeds.linearVel -
-       scales.wheelTrack / 2 * speeds.angularVel / okapi::radian) /
-      (scales.wheelDiameter * std::numbers::pi) * 60 * 360_deg; // Rotations per minute
+      (speeds.linearVel - (scales.wheelTrack / 2) *
+                              (speeds.angularVel /
+                               okapi::radian)) / // meters per second divided by
+      (scales.wheelDiameter * std::numbers::pi / 360_deg) *
+      ratio
+          .ratio; // meters per 360 degrees = angular speed (degrees per second)
   okapi::QAngularSpeed rightSpeed =
       (speeds.linearVel +
-       scales.wheelTrack / 2 * speeds.angularVel / okapi::radian) /
-      (scales.wheelDiameter * std::numbers::pi) * 60 *
-      360_deg;
+       (scales.wheelTrack / 2) * (speeds.angularVel / okapi::radian)) /
+      (scales.wheelDiameter * std::numbers::pi / 360_deg) * ratio.ratio;
 
   return {leftSpeed, rightSpeed};
 }
