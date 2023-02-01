@@ -100,8 +100,9 @@ void autonomous() {
 
   pros::Motor intake (-4);
   pros::ADIDigitalOut cylinder(1, false);
+  pros::ADIDigitalOut tilter(2, true);
 
-  flywheel->setTarget(600 * 0.885);
+  flywheel->setTarget(600 * 0.87);
 
   chassis->moveDistance(2_in);
   intake.move_relative(180 / ((36.0/84.0) * (12.0/24.0)), 200);
@@ -111,12 +112,12 @@ void autonomous() {
 
   flywheel->waitUntilSettled();
   cylinder.set_value(true);
-  pros::delay(200);
+  pros::delay(300);
   cylinder.set_value(false);
 
   flywheel->waitUntilSettled();
   cylinder.set_value(true);
-  pros::delay(200);
+  pros::delay(300);
   cylinder.set_value(false);
 
   flywheel->setTarget(0);
@@ -166,7 +167,7 @@ void opcontrol() {
         controller.setText(1, 0, std::to_string(++count));
 
         cylinder.set_value(true);
-        pros::delay(200);
+        pros::delay(300);
         cylinder.set_value(false);
       }
       pros::delay(10);
@@ -216,21 +217,21 @@ void opcontrol() {
   }};
 
   pros::Task tilter([=] {
-    flywheel->setTarget(600 * 0.885);
+    flywheel->setTarget(600 * 0.87); //0.885
     // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30 deg
     okapi::ControllerButton up(okapi::ControllerDigital::X);
     okapi::ControllerButton down(okapi::ControllerDigital::B);
-    pros::ADIDigitalOut cyl(2, false);
+    pros::ADIDigitalOut cyl(2, true);
     bool high = true;
     while (true) {
       if (up.changedToPressed() && !high) {
         high = true;
-        flywheel->setTarget(600 * 0.885);
-        //cyl.set_value(true);
+        flywheel->setTarget(600 * 0.87);
+        cyl.set_value(true);
       } else if (down.changedToPressed() && high) {
         high = false;
         flywheel->setTarget(600 * 0.7);
-        //cyl.set_value(false);
+        cyl.set_value(false);
       }
       pros::delay(20);
     }
