@@ -56,7 +56,7 @@ void initialize() {
       std::make_shared<okapi::Motor>(8),
       okapi::AbstractMotor::GearsetRatioPair(
           okapi::AbstractMotor::gearset::blue, 1),
-      3600, okapi::TimeUtilFactory::withSettledUtilParams(10, 100, 0_ms));
+      3600, okapi::TimeUtilFactory::withSettledUtilParams(1, 50, 0_ms));
 
   std::ranges::for_each(std::array{14, 7, 6}, pros::c::rotation_reset_position);
 
@@ -217,21 +217,22 @@ void opcontrol() {
   }};
 
   pros::Task tilter([=] {
-    flywheel->setTarget(600 * 0.87); //0.885
+    flywheel->setTarget(505); //0.885
     // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30 deg
     okapi::ControllerButton up(okapi::ControllerDigital::X);
     okapi::ControllerButton down(okapi::ControllerDigital::B);
-    pros::ADIDigitalOut cyl(2, true);
+    //pros::ADIDigitalOut cyl(2, true);
+    pros::ADIDigitalOut cyl(2, false);
     bool high = true;
     while (true) {
       if (up.changedToPressed() && !high) {
         high = true;
-        flywheel->setTarget(600 * 0.87);
-        cyl.set_value(true);
+        flywheel->setTarget(505);
+        //cyl.set_value(true);
       } else if (down.changedToPressed() && high) {
         high = false;
-        flywheel->setTarget(600 * 0.7);
-        cyl.set_value(false);
+        flywheel->setTarget(400);
+        //cyl.set_value(false);
       }
       pros::delay(20);
     }
@@ -246,59 +247,68 @@ void opcontrol() {
   okapi::ControllerButton dec(okapi::ControllerDigital::down);
 
   while (true) {
-    if (pidSelector.changedToPressed()) {
-      ++gainType %= 3;
-    }
-    if (precisionSelector.changedToPressed()) {
-      ++precisionLevel %= 3;
-      switch (precisionLevel) {
-      case 0:
-        change = 0.001;
-        break;
-      case 1:
-        change = 0.0001;
-        break;
-      case 2:
-        change = 0.00001;
-        break;
-      }
-    }
-    if (inc.changedToPressed()) {
-      auto gains = chassisPID->getGains();
-      auto gain = std::get<1>(gains);
-      switch (gainType) {
-      case 1: // integral
-        gain.kI += change;
-        controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
-        break;
-      case 2: // derivative
-        gain.kD += change;
-        controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
-        break;
-      default: // proportional
-        gain.kP += change;
-        controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
-      }
-      chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
-    }
+    // if (pidSelector.changedToPressed()) {
+    //   ++gainType %= 3;
+    // }
+    // if (precisionSelector.changedToPressed()) {
+    //   ++precisionLevel %= 3;
+    //   switch (precisionLevel) {
+    //   case 0:
+    //     change = 0.001;
+    //     break;
+    //   case 1:
+    //     change = 0.0001;
+    //     break;
+    //   case 2:
+    //     change = 0.00001;
+    //     break;
+    //   }
+    // }
+    // if (inc.changedToPressed()) {
+    //   auto gains = chassisPID->getGains();
+    //   auto gain = std::get<1>(gains);
+    //   switch (gainType) {
+    //   case 1: // integral
+    //     gain.kI += change;
+    //     controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
+    //     break;
+    //   case 2: // derivative
+    //     gain.kD += change;
+    //     controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
+    //     break;
+    //   default: // proportional
+    //     gain.kP += change;
+    //     controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
+    //   }
+    //   chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
+    // }
 
-    if (dec.changedToPressed()) {
-      auto gains = chassisPID->getGains();
-      auto gain = std::get<1>(gains);
-      switch (gainType) {
-      case 1: // integral
-        gain.kI -= change;
-        controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
-        break;
-      case 2: // derivative
-        gain.kD -= change;
-        controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
-        break;
-      default: // proportional
-        gain.kP -= change;
-        controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
-      }
-      chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
+    // if (dec.changedToPressed()) {
+    //   auto gains = chassisPID->getGains();
+    //   auto gain = std::get<1>(gains);
+    //   switch (gainType) {
+    //   case 1: // integral
+    //     gain.kI -= change;
+    //     controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
+    //     break;
+    //   case 2: // derivative
+    //     gain.kD -= change;
+    //     controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
+    //     break;
+    //   default: // proportional
+    //     gain.kP -= change;
+    //     controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
+    //   }
+    //   chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
+    // }
+
+    if(inc.changedToPressed()){
+      flywheel->setTarget(flywheel->getTarget() + 1);
+      controller.setText(1,0, "Fly Target: "s + std::to_string(flywheel->getTarget()));
+    }
+    if(dec.changedToPressed()){
+      flywheel->setTarget(flywheel->getTarget() - 1);
+      controller.setText(1,0, "Fly Target: "s + std::to_string(flywheel->getTarget())); //505
     }
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   -controller.getAnalog(okapi::ControllerAnalog::rightX));
