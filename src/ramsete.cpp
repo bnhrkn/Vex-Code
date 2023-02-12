@@ -1,8 +1,9 @@
 #include "project/ramsete.hpp"
 #include "geometry/pose.hpp"
+#include "main.h"
 #include <cmath>
 #include <numbers>
-
+using namespace okapi::literals;
 // RamseteController::RamseteController(const double ib, const double izeta)
 //     : b{ib}, zeta{izeta} {};
 
@@ -36,8 +37,8 @@
 // }
 
 ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
-                      const squiggles::ProfilePoint &goalPoint, double b,
-                      double zeta) {
+                      const squiggles::ProfilePoint &goalPoint, const double b,
+                      const double zeta) {
   using namespace okapi::literals;
   const auto goalPose = goalPoint.vector.pose;
   const auto globalError =
@@ -66,34 +67,43 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
       return 0.0;
     }
   }();
-
-  // return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
+  std::cout << "Diff. L: " << outLinearVel - goalPoint.vector.vel << " Diff. R: " << outRotationVel - rotationVel << std::endl;
+  //return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
   return {goalPoint.vector.vel * okapi::mps, rotationVel * okapi::radps};
 }
 
-auto stateToPose(okapi::OdomState state) -> squiggles::Pose {
-  return squiggles::Pose(state.x.convert(okapi::meter),
-                         state.y.convert(okapi::meter),
-                         state.theta.convert(okapi::radian));
+auto stateToPose(const okapi::OdomState state) -> squiggles::Pose {
+  return {state.x.convert(okapi::meter), // Transform theta for squiggles
+          state.y.convert(okapi::meter), state.theta.convert(okapi::radian)};
 }
 
-auto chassisToTankSpeeds(ChassisSpeeds speeds,
+auto chassisToTankSpeeds(const ChassisSpeeds speeds,
                          const okapi::ChassisScales scales,
                          const okapi::AbstractMotor::GearsetRatioPair ratio)
     -> TankSpeeds {
   using namespace okapi::literals;
 
   okapi::QAngularSpeed leftSpeed =
+      // Linear velocity minus tangential velocity,
       (speeds.linearVel - (scales.wheelTrack / 2) *
                               (speeds.angularVel /
                                okapi::radian)) / // meters per second divided by
-      (scales.wheelDiameter * std::numbers::pi / 360_deg) *
-      ratio
-          .ratio; // meters per 360 degrees = angular speed (degrees per second)
+      (scales.wheelDiameter / 2) *
+      okapi::radian / ratio.ratio; // meters per degree = wheel angular speed
+                                   // (degrees per second)
   okapi::QAngularSpeed rightSpeed =
       (speeds.linearVel +
        (scales.wheelTrack / 2) * (speeds.angularVel / okapi::radian)) /
-      (scales.wheelDiameter * std::numbers::pi / 360_deg) * ratio.ratio;
+      (scales.wheelDiameter / 2) * okapi::radian / ratio.ratio;
 
   return {leftSpeed, rightSpeed};
+}
+
+auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
+    -> okapi::OdomState {
+  return convertState(odometry->getState());
+}
+
+auto convertState(const okapi::OdomState &state) -> okapi::OdomState {
+  return {state.y, state.x, 90_deg - state.theta};
 }

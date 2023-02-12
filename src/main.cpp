@@ -1,5 +1,8 @@
 #include "main.h"
-//#include "project/CustomChassisController.hpp"
+#include "project/CustomChassisController.hpp"
+#include "project/indexer.hpp"
+#include "project/pidTuner.hpp"
+#include "project/ramsete.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <algorithm>
@@ -18,39 +21,42 @@ using namespace okapi::literals;
 
 okapi::Controller controller;
 
-constinit const auto gearset = okapi::AbstractMotor::gearset::blue;
-const auto ratio = okapi::AbstractMotor::GearsetRatioPair{gearset, 36.0 / 60.0};
-constinit const auto encoderUnit = okapi::AbstractMotor::encoderUnits::counts;
-constinit const auto maxRPM = okapi::toUnderlyingType(gearset);
-
-using gains = okapi::IterativePosPIDController::Gains;
-auto linearGains = gains{0.0001, 0.001, 0.001};
-auto courseGains = gains{0.0001, 0.001, 0.001};
-auto angleGains = gains{0.0001, 0.001, 0.001};
-
-std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
-
+const auto ratio = okapi::AbstractMotor::GearsetRatioPair{
+    okapi::AbstractMotor::gearset::blue, 36.0 / 60.0}; // motor rpm to wheel rpm
+const auto constraints = squiggles::Constraints(2, 2, 9);
+const auto slowConstraints = squiggles::Constraints(0.5, 2, 9);
 const auto odomScales =
     okapi::ChassisScales({2.75_in, 7.35_in, 4.50_in, 2.75_in}, 360);
-
 const auto chassisScales =
     okapi::ChassisScales({3.25_in, 12.75_in}, okapi::imev5BlueTPR);
 
 auto display = ui(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
+auto angleGains = okapi::IterativePosPIDController::Gains{0.0115, 0.000, 0.0};
+
+std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
 std::shared_ptr<okapi::AsyncVelIntegratedController> flywheel;
+std::shared_ptr<okapi::ThreeEncoderOdometry> odometry;
+std::shared_ptr<Indexer> indexer;
+std::shared_ptr<CustomChassisController> chassis;
+std::shared_ptr<okapi::IterativePosPIDController> turnPID;
 
 void on_center_button() {}
 
 void initialize() {
   auto makeMotor = [](int iport, bool ireversed) {
-    return okapi::Motor(iport, ireversed, gearset, encoderUnit);
+    return okapi::Motor(iport, ireversed, ratio.internalGearset,
+                        okapi::AbstractMotor::encoderUnits::counts);
   };
+
   okapi::Logger::setDefaultLogger(std::make_shared<okapi::Logger>(
       okapi::TimeUtilFactory::createDefault().getTimer(), // It needs a Timer
       "/ser/sout",                  // Output to the PROS terminal
       okapi::Logger::LogLevel::warn // Show errors and warnings
       ));
+
+  indexer = std::make_shared<Indexer>(pros::Distance(13),
+                                      pros::ADIDigitalOut(1), 150);
 
   flywheel = std::make_shared<okapi::AsyncVelIntegratedController>(
       std::make_shared<okapi::Motor>(8),
@@ -66,13 +72,25 @@ void initialize() {
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
           makeMotor(11, true), makeMotor(12, false), makeMotor(17, true)}),
 
-      std::make_shared<okapi::RotationSensor>(14, true),          // left
-      std::make_shared<okapi::RotationSensor>(7, false),          // right
-      std::make_shared<okapi::RotationSensor>(6), maxRPM, 12000); // middle
+      std::make_shared<okapi::RotationSensor>(14, true),       // left
+      std::make_shared<okapi::RotationSensor>(7, false),       // right
+      std::make_shared<okapi::RotationSensor>(6), 600, 12000); // middle
 
   model->resetSensors();
 
-  model->setBrakeMode(okapi::AbstractMotor::brakeMode::brake);
+  model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
+
+  odometry = std::make_shared<okapi::ThreeEncoderOdometry>(
+      okapi::TimeUtilFactory::createDefault(), model, odomScales);
+
+  odometry->setState({0_in, 0_in, 90_deg});
+
+  turnPID = std::make_shared<okapi::IterativePosPIDController>(
+      angleGains,
+      okapi::ConfigurableTimeUtilFactory(0.75, 0.5, 100_ms).create());
+
+  chassis = std::make_shared<CustomChassisController>(model, turnPID, odometry,
+                                                      chassisScales, ratio);
 
   pros::delay(
       500); // There is a race condition somewhere, sensors fail to reset.
@@ -83,70 +101,75 @@ void disabled() { model->stop(); }
 void competition_initialize() {}
 
 void autonomous() {
-  auto chassis =
-      okapi::ChassisControllerBuilder()
-          .withMotors({1, -2, 3}, {-11, 12, -17})
-          .withDimensions(ratio, odomScales)
-          .withSensors(okapi::RotationSensor(
-                           7, false), // swapped the left and right sensors?
-                       okapi::RotationSensor(14, true))
-          .withOdometry(odomScales)
-          .withGains({0.0006, 0.0000, 0.000000}, {0.0019, 0.00061, 0.000001},
-                     {0.0009, 0.00031, 0.000001})
-          .withChassisControllerTimeUtilFactory(
-              okapi::ConfigurableTimeUtilFactory(0.5, 1.0, 200_ms))
-          .build();
-  auto model = chassis->getModel();
+  auto fastGen = squiggles::SplineGenerator(
+      constraints,
+      std::make_shared<squiggles::TankModel>(
+          chassisScales.wheelTrack.convert(1_m), constraints),
+      0.01);
 
-  pros::Motor intake (-4);
-  pros::ADIDigitalOut cylinder(1, false);
-  pros::ADIDigitalOut tilter(2, true);
+  auto slowGen = squiggles::SplineGenerator(
+      slowConstraints,
+      std::make_shared<squiggles::TankModel>(
+          chassisScales.wheelTrack.convert(1_m), slowConstraints),
+      0.01);
 
-  flywheel->setTarget(600 * 0.87);
+  auto generatePath = [](std::vector<okapi::OdomState> states, squiggles::SplineGenerator &generator) {
+    std::vector<squiggles::Pose> poses(states.size());
+    std::ranges::transform(states, poses.begin(), stateToPose);
+    return generator.generate(poses);
+  };
+  auto generatePathTo = [&](std::vector<okapi::OdomState> states, squiggles::SplineGenerator &generator) {
+    states.insert(states.cbegin(), convertState(odometry->getState()));
+    return generatePath(states, generator);
+  };
 
-  chassis->moveDistance(2_in);
-  intake.move_relative(180 / ((36.0/84.0) * (12.0/24.0)), 200);
-  pros::delay(750);
-  chassis->moveDistance(-4_in);
-  chassis->turnAngle(185_deg);
+  pros::Motor intake(-4);
 
-  flywheel->waitUntilSettled();
-  cylinder.set_value(true);
-  pros::delay(300);
-  cylinder.set_value(false);
+  // flywheel->setTarget(505);
 
-  flywheel->waitUntilSettled();
-  cylinder.set_value(true);
-  pros::delay(300);
-  cylinder.set_value(false);
+  // X is pos horizontal, Y is pos vertical, theta is pos counterclockwise and 0
+  // is on x axis
+  // Begin at (36_in, 12_in, -90_deg)
+  // odometry->setState(convertState({36_in, 12_in, -90_deg}));
+  odometry->setState(convertState({0_in, 0_in, 0_deg}));
 
-  flywheel->setTarget(0);
-  // chassis->moveDistance(6_ft);
-  // chassis->turnAngle(180_deg);
-  // chassis->moveDistance(6_ft);
+  // chassis->runPath(generatePathTo({{36_in, 10_in, -90_deg}}));
+  // chassis->runPath(fastGen.generate({{0,0,0},{0.6096,0,0}}));
+  chassis->runPath(generatePath({{0_in,0_in,0_deg}, {24_in,0_in,45_deg}, {24_in, 24_in, 90_deg}}, fastGen));
+
+  // intake.move_relative(180 / ((36.0 / 84.0) * (12.0 / 24.0)), 200);
+  // //chassis->runPath(generatePathTo({{36_in, 12_in, -90_deg}}));
+  // chassis->runPath(generatePath({{2_in,0_in,0_deg},{0_in,0_in,0_deg}}));
+
+  // chassis.turnToAngle(90_deg);
+  // chassis.waitUntilSettled();
+  // while (true) {
+  //   display.setPosition(getConvertedState(odometry));
+  //   pros::delay(10);
+  // }
+
+  // pros::delay(750);
+  // chassis->moveDistance(-4_in);
+  // chassis->turnAngle(185_deg);
+
+  // flywheel->waitUntilSettled();
+  // cylinder.set_value(true);
+  // pros::delay(300);
+  // cylinder.set_value(false);
+
+  // flywheel->waitUntilSettled();
+  // cylinder.set_value(true);
+  // pros::delay(300);
+  // cylinder.set_value(false);
+
+  // flywheel->setTarget(0);
 }
 
 void opcontrol() {
-  auto chassis =
-      okapi::ChassisControllerBuilder()
-          .withMotors({1, -2, 3}, {-11, 12, -17})
-          .withDimensions(ratio, odomScales)
-          .withSensors(okapi::RotationSensor(
-                           7, false), // swapped the left and right sensors?
-                       okapi::RotationSensor(14, true))
-          .withOdometry(odomScales)
-          .withGains({0.0006, 0.0000, 0.000000}, {0.0019, 0.00061, 0.000001},
-                     {0.0009, 0.00031, 0.000001})
-          .withChassisControllerTimeUtilFactory(
-              okapi::ConfigurableTimeUtilFactory(0.5, 1.0, 200_ms))
-          .build();
-  auto chassisPID =
-      std::dynamic_pointer_cast<okapi::ChassisControllerPID>(chassis);
-
   using std::literals::string_literals::operator""s;
 
   pros::Task matchTimer{[&] {
-    okapi::ControllerButton expand(okapi::ControllerDigital::right);
+    okapi::ControllerButton expand(okapi::ControllerDigital::Y);
     pros::ADIDigitalOut cylinder(3, false);
     controller.rumble("-"s); // Match start rumble
     pros::delay(95000);      // Delay until 1:35
@@ -174,144 +197,137 @@ void opcontrol() {
     }
   }};
 
-  pros::Task intake{[&] {
+  pros::Task intake{[=] {
     pros::Motor intake(-4);
     pros::Optical colorSensor(12);
     colorSensor.set_led_pwm(255);
-
-    okapi::ControllerButton intakeBtn(okapi::ControllerDigital::L2);
-    okapi::ControllerButton reverse(okapi::ControllerDigital::left);
     intake.set_gearing(pros::E_MOTOR_GEAR_GREEN);
-    auto [hueMin, hueMax] = [&]() -> std::pair<int, int> {
-      if (display.isBlueTeam()) {
-        return {220, 240}; // Blue Path
+    constexpr auto proxThreshold = 20;
+
+    okapi::ControllerButton forward(okapi::ControllerDigital::right);
+    okapi::ControllerButton reverse(okapi::ControllerDigital::left);
+    okapi::ControllerButton autoPilotBtn(okapi::ControllerDigital::down);
+
+    auto inRange = [](auto num,
+                      std::pair<decltype(num), decltype(num)> range) -> bool {
+      auto minMax = std::minmax(range.first, range.second);
+      return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
+    };
+
+    std::pair<int, int> blueRange = {220, 240};
+    decltype(blueRange) redRange = {0, 25};
+
+    auto hueRange = display.isBlueTeam() ? blueRange : redRange;
+
+    bool intakeEnabled = true;
+    auto autoPilotEnabled = true;
+
+    while (!pros::Task::notify_take(true, 20)) {
+      // Toggle Controls
+      if (autoPilotBtn.changedToPressed()) {
+        autoPilotEnabled = !autoPilotEnabled;
+      }
+      if (forward.changedToPressed()) {
+        intakeEnabled = !intakeEnabled;
+      }
+
+      if (reverse.isPressed()) { // Reverse at any time
+        intake.move_velocity(-200);
+        continue;
+      }
+      if (!autoPilotEnabled) { // Manual mode
+                               // Only spin if enabled
+        intake.move_velocity(static_cast<int>(intakeEnabled) * 200);
+        continue;
+      }
+      // Autopilot code
+
+      // Intake should run and no roller detected
+      auto hue = colorSensor.get_hue();
+      auto prox = colorSensor.get_proximity();
+
+      if ((indexer->getCount() < 3 ||
+           intake.get_power() > 4.5) && // Intake should run
+          ((prox > proxThreshold) &&    // Far away
+           !(inRange(hue, blueRange) ||
+             inRange(hue, redRange)))) { // Not red or blue
+        intake.move_velocity(200);
+      } else if (prox <= proxThreshold &&  // Close
+                 inRange(hue, hueRange)) { // Right color
+        intake.move_velocity(200);
       } else {
-        return {0, 25}; // Red Path
-      }
-    }();
-
-    enum class intakeMode { fast, off };
-    auto mode = intakeMode::fast;
-    while (true) {
-      if (intakeBtn.changedToPressed()) {
-        if (mode == intakeMode::fast) {
-          mode = intakeMode::off;
-        } else {
-          mode = intakeMode::fast;
-        }
-      }
-
-      if (colorSensor.get_hue() >= hueMin && colorSensor.get_hue() <= hueMax) {
         intake.move_velocity(0);
-      } else {
-        if (reverse.isPressed()) {
-          intake.move_velocity(-200);
-        } else if (mode == intakeMode::off) {
-          intake.move_velocity(0);
-        } else {
-          intake.move_velocity(200);
-        }
       }
-      pros::delay(20);
     }
   }};
 
   pros::Task tilter([=] {
-    flywheel->setTarget(505); //0.885
-    // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30 deg
-    okapi::ControllerButton up(okapi::ControllerDigital::X);
-    okapi::ControllerButton down(okapi::ControllerDigital::B);
-    //pros::ADIDigitalOut cyl(2, true);
-    pros::ADIDigitalOut cyl(2, false);
-    bool high = true;
-    while (true) {
-      if (up.changedToPressed() && !high) {
-        high = true;
-        flywheel->setTarget(505);
-        //cyl.set_value(true);
-      } else if (down.changedToPressed() && high) {
-        high = false;
-        flywheel->setTarget(400);
-        //cyl.set_value(false);
-      }
-      pros::delay(20);
-    }
+    // flywheel->setTarget(505); // 0.885
+    //  // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30
+    //  deg okapi::ControllerButton up(okapi::ControllerDigital::X);
+    //  okapi::ControllerButton down(okapi::ControllerDigital::B);
+    //  //pros::ADIDigitalOut cyl(2, true);
+    //  pros::ADIDigitalOut cyl(2, false);
+    //  bool high = true;
+    //  while (true) {
+    //    if (up.changedToPressed() && !high) {
+    //      high = true;
+    //      flywheel->setTarget(505);
+    //    } else if (down.changedToPressed() && high) {
+    //      high = false;
+    //      flywheel->setTarget(400);
+    //    }
+    //    pros::delay(20);
+    //  }
   });
 
-  int gainType = 0;
-  int precisionLevel = 0;
-  double change = 0.001;
-  okapi::ControllerButton pidSelector(okapi::ControllerDigital::Y);
-  okapi::ControllerButton precisionSelector(okapi::ControllerDigital::A);
-  okapi::ControllerButton inc(okapi::ControllerDigital::up);
-  okapi::ControllerButton dec(okapi::ControllerDigital::down);
+  okapi::ControllerButton pidSelector(okapi::ControllerDigital::R1);
+  okapi::ControllerButton incPrecision(okapi::ControllerDigital::A);
+  okapi::ControllerButton decPresicion(okapi::ControllerDigital::Y);
+  okapi::ControllerButton inc(okapi::ControllerDigital::X);
+  okapi::ControllerButton dec(okapi::ControllerDigital::B);
+
+  okapi::ControllerButton turn(okapi::ControllerDigital::L1);
+
+  constexpr size_t size = 3;
+
+  auto gainGetter = [=]() {
+    auto gains = turnPID->getGains();
+    return std::array<double, size>{gains.kP, gains.kI, gains.kD};
+  };
+
+  auto gainSetter = [=](std::array<double, size> arr) {
+    std::cout << "P: " << arr[0] << "\nI: " << arr[1] << "\nD: " << arr[2]
+              << std::endl;
+
+    turnPID->setGains({arr[0], arr[1], arr[2]});
+  };
+  auto bruh = PIDConstantsTuner<size, gainGetter, gainSetter>();
+
+  controller.clear();
 
   while (true) {
-    // if (pidSelector.changedToPressed()) {
-    //   ++gainType %= 3;
-    // }
-    // if (precisionSelector.changedToPressed()) {
-    //   ++precisionLevel %= 3;
-    //   switch (precisionLevel) {
-    //   case 0:
-    //     change = 0.001;
-    //     break;
-    //   case 1:
-    //     change = 0.0001;
-    //     break;
-    //   case 2:
-    //     change = 0.00001;
-    //     break;
-    //   }
-    // }
-    // if (inc.changedToPressed()) {
-    //   auto gains = chassisPID->getGains();
-    //   auto gain = std::get<1>(gains);
-    //   switch (gainType) {
-    //   case 1: // integral
-    //     gain.kI += change;
-    //     controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
-    //     break;
-    //   case 2: // derivative
-    //     gain.kD += change;
-    //     controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
-    //     break;
-    //   default: // proportional
-    //     gain.kP += change;
-    //     controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
-    //   }
-    //   chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
-    // }
 
-    // if (dec.changedToPressed()) {
-    //   auto gains = chassisPID->getGains();
-    //   auto gain = std::get<1>(gains);
-    //   switch (gainType) {
-    //   case 1: // integral
-    //     gain.kI -= change;
-    //     controller.setText(1, 0, "kI: "s + std::to_string(gain.kI));
-    //     break;
-    //   case 2: // derivative
-    //     gain.kD -= change;
-    //     controller.setText(1, 0, "kD: "s + std::to_string(gain.kD));
-    //     break;
-    //   default: // proportional
-    //     gain.kP -= change;
-    //     controller.setText(1, 0, "kP: "s + std::to_string(gain.kP));
-    //   }
-    //   chassisPID->setGains(std::get<0>(gains), gain, std::get<2>(gains));
-    // }
+    if (dec.changedToPressed())
+      bruh.dec();
+    if (inc.changedToPressed())
+      bruh.inc();
+    if (decPresicion.changedToPressed())
+      bruh.decPresicion();
+    if (incPrecision.changedToPressed())
+      bruh.incPrecision();
+    if (pidSelector.changedToPressed()) {
+      bruh.nextGain();
+    }
+    // odometry->step();
+    // display.setPosition(odometry->getState());
+    if (turn.changedToPressed()) {
+      chassis->turnToAngle(getConvertedState(odometry).theta - 90_deg);
+      // chassis->waitUntilSettled();
+    }
 
-    if(inc.changedToPressed()){
-      flywheel->setTarget(flywheel->getTarget() + 1);
-      controller.setText(1,0, "Fly Target: "s + std::to_string(flywheel->getTarget()));
-    }
-    if(dec.changedToPressed()){
-      flywheel->setTarget(flywheel->getTarget() - 1);
-      controller.setText(1,0, "Fly Target: "s + std::to_string(flywheel->getTarget())); //505
-    }
-    model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
-                  -controller.getAnalog(okapi::ControllerAnalog::rightX));
+    // model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
+    // -controller.getAnalog(okapi::ControllerAnalog::rightX));
 
     pros::delay(10);
   }

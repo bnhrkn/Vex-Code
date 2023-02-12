@@ -6,6 +6,7 @@ enum class RollerColor {
     BLUE
 };
 
+
 class Intake {
 public:
   Intake(pros::MotorGroup imotorGroup, pros::Optical iopticalSensor, RollerColor color);
