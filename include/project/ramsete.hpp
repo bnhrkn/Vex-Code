@@ -32,3 +32,8 @@ auto chassisToTankSpeeds(const ChassisSpeeds speeds,
 auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
     -> okapi::OdomState;
 auto convertState(const okapi::OdomState &state) -> okapi::OdomState;
+
+auto rotateAroundOrigin(const okapi::OdomState &frame, const okapi::QAngle &angle) -> okapi::OdomState;
+auto translatePoint(const okapi::OdomState &frame, const okapi::OdomState &delta) -> okapi::OdomState;
+
+

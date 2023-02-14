@@ -67,8 +67,9 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
       return 0.0;
     }
   }();
-  std::cout << "Diff. L: " << outLinearVel - goalPoint.vector.vel << " Diff. R: " << outRotationVel - rotationVel << std::endl;
-  //return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
+  // std::cout << "Diff. L: " << outLinearVel - goalPoint.vector.vel
+  //           << " Diff. R: " << outRotationVel - rotationVel << std::endl;
+  // return {outLinearVel * okapi::mps, outRotationVel * okapi::radps};
   return {goalPoint.vector.vel * okapi::mps, rotationVel * okapi::radps};
 }
 
@@ -106,4 +107,21 @@ auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
 
 auto convertState(const okapi::OdomState &state) -> okapi::OdomState {
   return {state.y, state.x, 90_deg - state.theta};
+}
+
+// Rotates a vector around the origin by a certain angle
+auto rotateAroundOrigin(const okapi::OdomState &frame,
+                        const okapi::QAngle &angle) -> okapi::OdomState {
+  const auto &x = frame.x;
+  const auto &y = frame.y;
+  const auto &yaw = frame.theta;
+
+  const auto &radAngle = angle.convert(okapi::radian);
+  return {x * std::cos(radAngle) - y * std::sin(radAngle),
+          x * std::sin(radAngle) + y * std::cos(radAngle), yaw - angle};
+}
+
+// Translate a vector by a certain delta. Theta in delta has no effect.
+auto translatePoint(const okapi::OdomState &frame, const okapi::OdomState &delta) -> okapi::OdomState {
+  return {frame.x - delta.x, frame.y - delta.y, frame.theta};
 }
