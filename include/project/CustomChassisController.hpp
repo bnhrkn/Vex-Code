@@ -6,6 +6,7 @@ public:
   CustomChassisController(
       std::shared_ptr<okapi::ChassisModel> imodel,
       std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
+      std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
       std::shared_ptr<okapi::Odometry> iodom,
       okapi::ChassisScales ichassisScales,
       okapi::AbstractMotor::GearsetRatioPair idriveRatio);
@@ -16,12 +17,16 @@ public:
 
   void turnToAngle(okapi::QAngle angle);
 
+  void driveDistance(okapi::QLength distance);
+
   bool isSettled();
 
   void waitUntilSettled();
 
+  void cancelMovement();
+
 protected:
-  enum class MovementType { disabled = 0, straight = 1, turn = 2 };
+  enum class MovementType { disabled = 0, path = 1, turn = 2,  straight = 3};
   std::atomic<MovementType> mode = MovementType::disabled;
 
   void movementLoop();
@@ -31,6 +36,7 @@ protected:
   pros::Task odomTask;
 
   std::shared_ptr<okapi::IterativePosPIDController> turnPID;
+  std::shared_ptr<okapi::IterativePosPIDController> distancePID;
 
   std::shared_ptr<okapi::Odometry> odom;
 

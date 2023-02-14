@@ -6,11 +6,17 @@ using namespace okapi::literals;
 CustomChassisController::CustomChassisController(
     std::shared_ptr<okapi::ChassisModel> imodel,
     std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
+    std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
     std::shared_ptr<okapi::Odometry> iodom, okapi::ChassisScales ichassisScales,
     okapi::AbstractMotor::GearsetRatioPair idriveRatio)
     : movementTask([this]() { movementLoop(); }),
-      odomTask([this]() { odomLoop(); }), turnPID(iturnPID), odom(iodom),
-      model(imodel), chassisScales(ichassisScales), driveRatio(idriveRatio) {
+      odomTask([this]() { odomLoop(); }), turnPID(iturnPID),
+      distancePID(idistancePID), odom(iodom), model(imodel),
+      chassisScales(ichassisScales), driveRatio(idriveRatio) {
+  turnPID->setTarget(
+      okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta)
+          .convert(1_deg));
+  distancePID->setTarget(0);
   // pros::c::task_notify_when_deleting(
   //     pros::c::task_get_current(), (pros::task_t)movementTask, 1,
   //     pros::notify_action_e_t::E_NOTIFY_ACTION_OWRITE);
@@ -40,13 +46,13 @@ void CustomChassisController::movementLoop() {
     // End task when notified
     switch (mode.load()) {
 
-    case MovementType::straight: {
-      printf("Entered straight path case\n");
+    case MovementType::path: {
+      printf("Entered path case\n");
       std::scoped_lock<pros::Mutex> lock(movementMutex);
       auto prev = std::make_unique<std::uint32_t>(pros::millis());
       auto timeDelta = (path[1].time - path[0].time) * 1000;
       for (auto &point : path) {
-        if (!taskValid() || mode.load() != MovementType::straight)
+        if (!taskValid() || mode.load() != MovementType::path)
           break;
         // printf("Running path\n");
         // std::cout << "Command Position: " << point.vector.pose.x <<
@@ -59,11 +65,13 @@ void CustomChassisController::movementLoop() {
             ramsete(stateToPose(getConvertedState(odom)), point, 2.0, 0.7);
         const auto [left, right] =
             chassisToTankSpeeds(speeds, chassisScales, driveRatio);
-        // std::cout << "left: " << left.convert(1_rpm) << ", right: " << right.convert(1_rpm) << std::endl;
+        // std::cout << "left: " << left.convert(1_rpm) << ", right: " <<
+        // right.convert(1_rpm) << std::endl;
         model->left(left.convert(600_rpm));
         model->right(right.convert(600_rpm));
         pros::Task::delay_until(prev.get(), timeDelta);
       }
+      printf("Done path\n");
       model->stop();
       break;
     }
@@ -78,15 +86,20 @@ void CustomChassisController::movementLoop() {
       while (taskValid() && mode.load() == MovementType::turn) {
         // printf("Running turn\n");
         //   Do math to figure out the right direction to turn
-        auto nowAngle = okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta);
-        auto error = okapi::OdomMath::constrainAngle180(turnPID->getTarget() * 1_deg - nowAngle);
-        auto inputValue = turnPID->getTarget() -
-                          error.convert(1_deg); // Fool the controller to use our error
+        auto nowAngle =
+            okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta);
+        auto error = okapi::OdomMath::constrainAngle180(
+            turnPID->getTarget() * 1_deg - nowAngle);
+        auto inputValue =
+            turnPID->getTarget() -
+            error.convert(1_deg); // Fool the controller to use our error
         turnPID->step(inputValue);
 
-        if(turnPID->isSettled()) break; // Must be after step or will instantly settle
+        if (turnPID->isSettled())
+          break; // Must be after step or will instantly settle
 
-        // std::cout << "Now Angle: " << nowAngle.convert(1_deg) << ", Error: " << error.convert(1_deg)
+        // std::cout << "Now Angle: " << nowAngle.convert(1_deg) << ", Error: "
+        // << error.convert(1_deg)
         //           << ", Target: " << turnPID->getTarget()
         //           << ", Real Error: " << turnPID->getError() << std::endl;
 
@@ -97,6 +110,47 @@ void CustomChassisController::movementLoop() {
       model->stop();
       break;
     }
+    case MovementType::straight: {
+      printf("Entered straight case\n");
+      std::scoped_lock<pros::Mutex> lock(movementMutex);
+      auto prev = std::make_unique<std::uint32_t>(pros::millis());
+      auto initalPos = getConvertedState(odom);
+
+      while (taskValid() && mode.load() == MovementType::straight) {
+        auto nowTranslatedPos =
+            translatePoint(getConvertedState(odom), initalPos);
+        auto nowRotatedPos =
+            rotateAroundOrigin(nowTranslatedPos, -initalPos.theta);
+        auto x = nowRotatedPos.x.convert(
+            okapi::meter); // Straight distance from where we started
+        // std::cout << "InitalPos: " << initalPos.str()
+        //           << "\nTransPos: " << nowTranslatedPos.str()
+        //           << "\nrotatedPos: " << nowRotatedPos.str()
+        //           << "\nTarget: " << distancePID->getTarget() << std::endl;
+        distancePID->step(x);
+
+        // Angle stuff to remain on course
+        auto nowAngle =
+            okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta);
+        auto angleError = okapi::OdomMath::constrainAngle180(
+            turnPID->getTarget() * 1_deg - nowAngle);
+        auto angleInputValue =
+            turnPID->getTarget() -
+            angleError.convert(1_deg); // Fool the controller to use our error
+        turnPID->step(angleInputValue);
+
+        if (distancePID->isSettled())
+          break;
+
+         //model->driveVector(distancePID->getOutput(), turnPID->getOutput());
+        model->forward(distancePID->getOutput());
+        pros::Task::delay_until(prev.get(), 10);
+      }
+      printf("Done Straight\n");
+      model->stop();
+      break;
+    }
+
     case MovementType::disabled: // Do nothing
       printf("Warning: Entered disabled case");
       break;
@@ -127,11 +181,12 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
   printf("Sending turntoangle command\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
+  turnPID->reset();
   turnPID->setTarget(okapi::OdomMath::constrainAngle360(angle).convert(1_deg));
   mode.store(MovementType::turn);
   movementTask.resume();
   printf("done all the stuff\n");
-  //pros::delay(50);
+  // pros::delay(50);
 }
 
 void CustomChassisController::runPath(
@@ -140,6 +195,24 @@ void CustomChassisController::runPath(
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   path = std::move(ipath);
+  mode.store(MovementType::path);
+  movementTask.resume();
+}
+
+void CustomChassisController::driveDistance(okapi::QLength distance) {
+  printf("Sending moveDistance command\n");
+  mode.store(MovementType::disabled);
+  std::scoped_lock<pros::Mutex> lock(movementMutex);
+  distancePID->reset();
+  distancePID->setTarget(distance.convert(okapi::meter));
+  // Angle target remains the same
   mode.store(MovementType::straight);
   movementTask.resume();
+}
+
+void CustomChassisController::cancelMovement(){
+  printf("Cancelling movement\n");
+  mode.store(MovementType::disabled);
+  std::scoped_lock<pros::Mutex> lock(movementMutex);
+  waitUntilSettled();
 }
