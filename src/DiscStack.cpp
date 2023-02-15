@@ -1,6 +1,7 @@
 #include "project/DiscStack.hpp"
+#include "project/algorithms.hpp"
 
-auto getReading(pros::Distance &distance) -> std::uint32_t {
+auto getReading(pros::Distance &distance) -> int {
   auto value = distance.get();
   if (value > 85)
     return 0;
@@ -13,31 +14,18 @@ auto getReading(pros::Distance &distance) -> std::uint32_t {
   return 4; // Disc is passing, cannot hold 4
 }
 
-Indexer::Indexer(pros::Distance idistance, pros::ADIDigitalOut icylinder,
-                 std::uint32_t thresholdTime)
-    : distance(idistance), cylinder(icylinder), threshold(thresholdTime),
-      task([&]() { taskFunction(); }){
-      };
-Indexer::~Indexer() { task.notify(); }
+Indexer::Indexer(pros::Distance idistance, std::uint32_t thresholdTime)
+    : distance(idistance), threshold(thresholdTime),
+      task([&]() { taskFunction(); }){};
+Indexer::~Indexer() { task.remove(); }
 
 void Indexer::taskFunction() {
-  uint32_t time = 0;
-  auto process = discCount.load();
+  auto debounce = debouncer(int{0}, threshold, getReading(distance));
   while (!pros::Task::notify_take(true, 10)) {
-    auto reading = getReading(distance);
-    //std::cout << "reading: " << reading << " process: " << process << std::endl;
-    if (reading != process) {
-      process = reading;
-      time = pros::millis();
-    } else if (pros::millis() - time > threshold && process != discCount.load()) {
-      discCount.store(process);
-    }
+    debounce.poll(getReading(distance));
+    if (debounce.get() != discCount.load())
+      discCount.store(debounce.get());
   }
 }
 
-std::uint32_t Indexer::getCount(){
-    return discCount.load();
-}
-void Indexer::decrementCount(){ // Not working, is immediately undone in taskFunction
-    discCount--;
-}
+int Indexer::getCount() const { return discCount.load(); }

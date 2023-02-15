@@ -1,8 +1,8 @@
 #include "main.h"
 #include "project/CustomChassisController.hpp"
 #include "project/DiscStack.hpp"
-#include "project/pidTuner.hpp"
 #include "project/algorithms.hpp"
+#include "project/pidTuner.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
 #include <algorithm>
@@ -57,8 +57,7 @@ void initialize() {
       okapi::Logger::LogLevel::warn // Show errors and warnings
       ));
 
-  indexer = std::make_shared<Indexer>(pros::Distance(13),
-                                      pros::ADIDigitalOut(1), 150);
+  indexer = std::make_shared<Indexer>(pros::Distance(13), 150);
 
   flywheel = std::make_shared<okapi::AsyncVelIntegratedController>(
       std::make_shared<okapi::Motor>(8),
@@ -100,7 +99,7 @@ void initialize() {
 
   pros::Task intake{[=] {
     pros::Motor intake(-4);
-    pros::Optical colorSensor(12);
+    pros::Optical colorSensor(16);
     colorSensor.set_led_pwm(255);
     intake.set_gearing(pros::E_MOTOR_GEAR_GREEN);
     constexpr auto proxThreshold = 20;
@@ -122,6 +121,9 @@ void initialize() {
 
     bool intakeEnabled = true;
     auto autoPilotEnabled = true;
+
+    auto jamDebounce = debouncer(5.0, 100, 100.0);
+    auto powerDebounce = debouncer(2.0, 100, 0.0);
 
     while (!pros::Task::notify_take(true, 20)) {
       // Toggle Controls
@@ -146,14 +148,17 @@ void initialize() {
       // Intake should run and no roller detected
       auto hue = colorSensor.get_hue();
       auto prox = colorSensor.get_proximity();
+      jamDebounce.poll(intake.get_efficiency());
+      powerDebounce.poll(intake.get_power());
+      std::cout << "Efficiency: " << intake.get_efficiency() << std::endl;
 
       if ((indexer->getCount() < 3 ||
-           intake.get_power() > 4.5) && // Intake should run
+           powerDebounce.get() > 4.5) && // Intake should run
           ((prox > proxThreshold) &&    // Far away
            !(inRange(hue, blueRange) ||
              inRange(hue, redRange)))) { // Not red or blue
 
-        if (intake.get_efficiency() < 10) {
+        if (jamDebounce.get() < 10 && intake.get_torque() > 0.8) {
           intake.move_velocity(-200);
           pros::delay(200);
         } else {
@@ -309,22 +314,22 @@ void opcontrol() {
 
   pros::Task tilter([=] {
     flywheel->setTarget(505); // 0.885
-     // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30
-     okapi::ControllerButton up(okapi::ControllerDigital::X);
-     okapi::ControllerButton down(okapi::ControllerDigital::B);
-     //pros::ADIDigitalOut cyl(2, true);
-     pros::ADIDigitalOut cyl(2, false);
-     bool high = true;
-     while (true) {
-       if (up.changedToPressed() && !high) {
-         high = true;
-         flywheel->setTarget(505);
-       } else if (down.changedToPressed() && high) {
-         high = false;
-         flywheel->setTarget(400);
-       }
-       pros::delay(20);
-     }
+    // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30
+    okapi::ControllerButton up(okapi::ControllerDigital::X);
+    okapi::ControllerButton down(okapi::ControllerDigital::B);
+    // pros::ADIDigitalOut cyl(2, true);
+    pros::ADIDigitalOut cyl(2, false);
+    bool high = true;
+    while (true) {
+      if (up.changedToPressed() && !high) {
+        high = true;
+        flywheel->setTarget(505);
+      } else if (down.changedToPressed() && high) {
+        high = false;
+        flywheel->setTarget(400);
+      }
+      pros::delay(20);
+    }
   });
 
   okapi::ControllerButton pidSelector(okapi::ControllerDigital::R1);
