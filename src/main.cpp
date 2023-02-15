@@ -102,7 +102,7 @@ void initialize() {
     pros::Optical colorSensor(16);
     colorSensor.set_led_pwm(255);
     intake.set_gearing(pros::E_MOTOR_GEAR_GREEN);
-    constexpr auto proxThreshold = 20;
+    constexpr auto proxThreshold = 70;
 
     okapi::ControllerButton forward(okapi::ControllerDigital::right);
     okapi::ControllerButton reverse(okapi::ControllerDigital::left);
@@ -118,6 +118,7 @@ void initialize() {
     decltype(blueRange) redRange = {0, 25};
 
     auto hueRange = display.isBlueTeam() ? blueRange : redRange;
+    auto wrongHueRange = display.isBlueTeam() ? redRange : blueRange;
 
     bool intakeEnabled = true;
     auto autoPilotEnabled = true;
@@ -144,32 +145,46 @@ void initialize() {
         continue;
       }
       // Autopilot code
-
-      // Intake should run and no roller detected
       auto hue = colorSensor.get_hue();
       auto prox = colorSensor.get_proximity();
       jamDebounce.poll(intake.get_efficiency());
       powerDebounce.poll(intake.get_power());
-      std::cout << "Efficiency: " << intake.get_efficiency() << std::endl;
+      std::cout << "Prox: " << prox << " Hue: " << hue << " In range: " << inRange(hue, hueRange) << std::endl;
 
-      if ((indexer->getCount() < 3 ||
-           powerDebounce.get() > 4.5) && // Intake should run
-          ((prox > proxThreshold) &&    // Far away
-           !(inRange(hue, blueRange) ||
-             inRange(hue, redRange)))) { // Not red or blue
-
-        if (jamDebounce.get() < 10 && intake.get_torque() > 0.8) {
-          intake.move_velocity(-200);
-          pros::delay(200);
-        } else {
-          intake.move_velocity(200);
-        }
-      } else if (prox <= proxThreshold &&  // Close
-                 inRange(hue, hueRange)) { // Right color
-        intake.move_velocity(200);
-      } else {
+      if(jamDebounce.get() < 10 && intake.get_torque() > 0.8){
+        intake.move_velocity(-200);
+        pros::delay(200);
+      }
+      else if(prox >= proxThreshold && inRange(hue, hueRange)){
         intake.move_velocity(0);
       }
+      else if(prox >= proxThreshold && inRange(hue, wrongHueRange)){
+        intake.move_velocity(200);
+      }
+      else if(indexer->getCount() < 3 || powerDebounce.get() > 4.5){
+        intake.move_velocity(200);
+      }
+      else {
+        intake.move_velocity(0);
+      }
+
+      // if ((indexer->getCount() < 3 ||
+      //      powerDebounce.get() > 4.5) && // Intake should run
+      //     !((prox > proxThreshold) &&    // Not, close and ourcolor
+      //      !inRange(hue, hueRange))) { // Not our color
+
+      //   if (jamDebounce.get() < 10 && intake.get_torque() > 0.8) {
+      //     intake.move_velocity(-200);
+      //     pros::delay(200);
+      //   } else {
+      //     intake.move_velocity(200);
+      //   }
+      // } else if (prox <= proxThreshold &&  // Close
+      //            inRange(hue, hueRange)) { // Right color
+      //   intake.move_velocity(200);
+      // } else {
+      //   intake.move_velocity(0);
+      // }
     }
   }};
 
