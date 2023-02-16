@@ -1,0 +1,88 @@
+#include "project/intake.hpp"
+#include "project/algorithms.hpp"
+
+auto distanceToDiscNum(pros::Distance &distance) -> int {
+  auto value = distance.get();
+  if (value > 85)
+    return 0;
+  if (value > 70)
+    return 1;
+  if (value > 50)
+    return 2;
+  if (value > 25)
+    return 3;
+  return 4; // Disc is passing, cannot hold 4
+}
+
+Intake::Intake(pros::Motor motor, pros::Optical rollerSensor,
+               pros::Distance indexerSensor, hueRange targetColor,
+               hueRange otherColor, okapi::ControllerButton reverseBtn)
+    : targetColor(targetColor), otherColor(otherColor), intakeMotor(motor),
+      rollerSensor(rollerSensor), indexerSensor(indexerSensor),
+      reverseBtn(reverseBtn), internalTask([this]() { taskFunction(); }) {
+  rollerSensor.set_led_pwm(255);
+  intakeMotor.set_gearing(pros::E_MOTOR_GEAR_GREEN);
+}
+Intake::~Intake() { internalTask.remove(); }
+
+void Intake::taskFunction() {
+  constexpr auto proxThreshold = 70;
+  auto jamDebounce = debouncer(5.0, 100, 100.0);
+  auto powerDebounce = debouncer(2.0, 100, 0.0);
+  auto discDebounce = debouncer(int{0}, 150, distanceToDiscNum(indexerSensor));
+  auto torqueFilter = okapi::AverageFilter<10>();
+  while (!pros::Task::notify_take(true, 10)) {
+    discDebounce.poll(distanceToDiscNum(indexerSensor));
+    jamDebounce.poll(intakeMotor.get_efficiency());
+    powerDebounce.poll(intakeMotor.get_power());
+    torqueFilter.filter(intakeMotor.get_torque());
+
+    if (reverseBtn.isPressed()) {
+      intakeMotor.move_velocity(-200);
+      continue;
+    }
+    if (manual) {
+      intakeMotor.move_velocity(static_cast<int>(enabled) * 200);
+      continue;
+    }
+
+    auto hue = rollerSensor.get_hue();
+    auto prox = rollerSensor.get_proximity();
+    std::cout << "Torque: " << intakeMotor.get_torque() << " Filtered: " << torqueFilter.getOutput() << std::endl;
+    if (jamDebounce.get() < 10 && intakeMotor.get_torque() > 1.0) {
+      intakeMotor.move_velocity(-200);
+      pros::delay(200);
+    } else if (prox >= proxThreshold && inRange(hue, targetColor)) {
+      intakeMotor.move_velocity(0);
+    } else if (prox >= proxThreshold && inRange(hue, otherColor)) {
+      intakeMotor.move_velocity(200);
+    } else if (discDebounce.get() < 3 || powerDebounce.get() > 4.5) {
+      intakeMotor.move_velocity(200);
+    } else {
+      intakeMotor.move_velocity(0);
+    }
+  }
+}
+
+void Intake::toggleEnabledMode(){
+    setEnabledMode(!enabled);
+}
+
+void Intake::toggleManualMode(){
+    setManualMode(!manual);
+}
+void Intake::setManualMode(bool manual){
+    Intake::manual = manual;
+}
+void Intake::setEnabledMode(bool enabled){
+    Intake::enabled = enabled;
+}
+bool Intake::isSettled(){
+    return intakeMotor.get_power() == 0.0;
+}
+void Intake::waitUntilSettled(uint32_t timeoutMillis){
+    auto now = pros::millis();
+    while(!isSettled() && pros::millis() - now < timeoutMillis){
+        pros::delay(10);
+    }
+}

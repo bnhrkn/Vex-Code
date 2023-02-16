@@ -64,3 +64,8 @@ protected:
   T output;
   std::uint32_t time = 0;
 };
+
+auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
+  auto minMax = std::minmax(range.first, range.second);
+  return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
+};

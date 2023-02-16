@@ -1,7 +1,7 @@
 #include "main.h"
 #include "project/CustomChassisController.hpp"
-#include "project/DiscStack.hpp"
 #include "project/algorithms.hpp"
+#include "project/intake.hpp"
 #include "project/pidTuner.hpp"
 #include "project/ui.hpp"
 #include "pros/rtos.hpp"
@@ -38,7 +38,7 @@ auto distanceGains = okapi::IterativePosPIDController::Gains{0.6, 0.0, 0.0};
 std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
 std::shared_ptr<okapi::AsyncVelIntegratedController> flywheel;
 std::shared_ptr<okapi::ThreeEncoderOdometry> odometry;
-std::shared_ptr<Indexer> indexer;
+std::shared_ptr<Intake> intake;
 std::shared_ptr<CustomChassisController> chassis;
 std::shared_ptr<okapi::IterativePosPIDController> turnPID;
 std::shared_ptr<okapi::IterativePosPIDController> distancePID;
@@ -57,7 +57,15 @@ void initialize() {
       okapi::Logger::LogLevel::warn // Show errors and warnings
       ));
 
-  indexer = std::make_shared<Indexer>(pros::Distance(13), 150);
+  std::pair<int, int> blueRange = {220, 240};
+  decltype(blueRange) redRange = {0, 25};
+
+  auto hueRange = display.isBlueTeam() ? blueRange : redRange;
+  auto wrongHueRange = display.isBlueTeam() ? redRange : blueRange;
+
+  intake = std::make_shared<Intake>(
+      pros::Motor(-4), pros::Optical(16), pros::Distance(13), hueRange,
+      wrongHueRange, okapi::ControllerButton(okapi::ControllerDigital::left));
 
   flywheel = std::make_shared<okapi::AsyncVelIntegratedController>(
       std::make_shared<okapi::Motor>(8),
@@ -96,97 +104,6 @@ void initialize() {
 
   chassis = std::make_shared<CustomChassisController>(
       model, turnPID, distancePID, odometry, chassisScales, ratio);
-
-  pros::Task intake{[=] {
-    pros::Motor intake(-4);
-    pros::Optical colorSensor(16);
-    colorSensor.set_led_pwm(255);
-    intake.set_gearing(pros::E_MOTOR_GEAR_GREEN);
-    constexpr auto proxThreshold = 70;
-
-    okapi::ControllerButton forward(okapi::ControllerDigital::right);
-    okapi::ControllerButton reverse(okapi::ControllerDigital::left);
-    okapi::ControllerButton autoPilotBtn(okapi::ControllerDigital::down);
-
-    auto inRange = [](auto num,
-                      std::pair<decltype(num), decltype(num)> range) -> bool {
-      auto minMax = std::minmax(range.first, range.second);
-      return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
-    };
-
-    std::pair<int, int> blueRange = {220, 240};
-    decltype(blueRange) redRange = {0, 25};
-
-    auto hueRange = display.isBlueTeam() ? blueRange : redRange;
-    auto wrongHueRange = display.isBlueTeam() ? redRange : blueRange;
-
-    bool intakeEnabled = true;
-    auto autoPilotEnabled = true;
-
-    auto jamDebounce = debouncer(5.0, 100, 100.0);
-    auto powerDebounce = debouncer(2.0, 100, 0.0);
-
-    while (!pros::Task::notify_take(true, 20)) {
-      // Toggle Controls
-      if (autoPilotBtn.changedToPressed()) {
-        autoPilotEnabled = !autoPilotEnabled;
-      }
-      if (forward.changedToPressed()) {
-        intakeEnabled = !intakeEnabled;
-      }
-
-      if (reverse.isPressed()) { // Reverse at any time
-        intake.move_velocity(-200);
-        continue;
-      }
-      if (!autoPilotEnabled) { // Manual mode
-                               // Only spin if enabled
-        intake.move_velocity(static_cast<int>(intakeEnabled) * 200);
-        continue;
-      }
-      // Autopilot code
-      auto hue = colorSensor.get_hue();
-      auto prox = colorSensor.get_proximity();
-      jamDebounce.poll(intake.get_efficiency());
-      powerDebounce.poll(intake.get_power());
-      std::cout << "Prox: " << prox << " Hue: " << hue << " In range: " << inRange(hue, hueRange) << std::endl;
-
-      if(jamDebounce.get() < 10 && intake.get_torque() > 0.8){
-        intake.move_velocity(-200);
-        pros::delay(200);
-      }
-      else if(prox >= proxThreshold && inRange(hue, hueRange)){
-        intake.move_velocity(0);
-      }
-      else if(prox >= proxThreshold && inRange(hue, wrongHueRange)){
-        intake.move_velocity(200);
-      }
-      else if(indexer->getCount() < 3 || powerDebounce.get() > 4.5){
-        intake.move_velocity(200);
-      }
-      else {
-        intake.move_velocity(0);
-      }
-
-      // if ((indexer->getCount() < 3 ||
-      //      powerDebounce.get() > 4.5) && // Intake should run
-      //     !((prox > proxThreshold) &&    // Not, close and ourcolor
-      //      !inRange(hue, hueRange))) { // Not our color
-
-      //   if (jamDebounce.get() < 10 && intake.get_torque() > 0.8) {
-      //     intake.move_velocity(-200);
-      //     pros::delay(200);
-      //   } else {
-      //     intake.move_velocity(200);
-      //   }
-      // } else if (prox <= proxThreshold &&  // Close
-      //            inRange(hue, hueRange)) { // Right color
-      //   intake.move_velocity(200);
-      // } else {
-      //   intake.move_velocity(0);
-      // }
-    }
-  }};
 
   pros::delay(
       500); // There is a race condition somewhere, sensors fail to reset.
@@ -385,6 +302,11 @@ void opcontrol() {
     if (pidSelector.changedToPressed()) {
       bruh.nextGain();
     }
+    
+    if (controller[okapi::ControllerDigital::down].changedToPressed())
+      intake->toggleManualMode();
+    if (controller[okapi::ControllerDigital::right].changedToPressed())
+      intake->toggleEnabledMode();
     // odometry->step();
     display.setPosition(getConvertedState(odometry));
 

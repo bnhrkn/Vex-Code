@@ -1,24 +1,31 @@
 #pragma once
 #include "main.h"
 
-enum class RollerColor {
-    RED,
-    BLUE
-};
-
+using hueRange = std::pair<int,int>;
 
 class Intake {
 public:
-  Intake(pros::MotorGroup imotorGroup, pros::Optical iopticalSensor, RollerColor color);
+  enum class Mode;
+  enum class State;
+  Intake(pros::Motor motor, pros::Optical rollerSensor,
+               pros::Distance indexerSensor, hueRange targetColor, hueRange otherColor, okapi::ControllerButton reverseBtn);
   ~Intake();
-  void stop();
-  void reverse();
-  void forward();
-  void waitUntilSettled(uint32_t timeoutMillis);
+  void setManualMode(bool manual);
+  void toggleManualMode();
+  void setEnabledMode(bool enabled);
+  void toggleEnabledMode();
+  void waitUntilSettled(uint32_t timeoutMillis = TIMEOUT_MAX);
   bool isSettled();
 
 protected:
+  void taskFunction();
+  std::atomic_bool manual = false;
+  std::atomic_bool enabled = true;
+  hueRange targetColor;
+  hueRange otherColor;
+  pros::Motor intakeMotor;
+  pros::Optical rollerSensor;
+  pros::Distance indexerSensor;
+  okapi::ControllerButton reverseBtn;
   pros::Task internalTask;
-  pros::MotorGroup motor;
-  pros::Optical sensor;
 };
