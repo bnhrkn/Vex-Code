@@ -140,13 +140,16 @@ void autonomous() {
     return generatePath(states, generator);
   };
 
-  auto shoot = [&]() {
-    flywheel->waitUntilSettled();
-    cylinder.set_value(true);
-    pros::delay(300);
-    cylinder.set_value(false);
-    pros::delay(50);
+  auto shoot = [&](int numTimes = 1) {
+    for (int i = 0; i < numTimes; i++) {
+      flywheel->waitUntilSettled();
+      cylinder.set_value(true);
+      pros::delay(300);
+      cylinder.set_value(false);
+      pros::delay(50);
+    }
   };
+  constexpr auto targetPoint = okapi::Point{0.75_tile, 5.25_tile};
 
   flywheel->setTarget(505);
 
@@ -154,62 +157,33 @@ void autonomous() {
   // is on x axis
   // Begin at (36_in, 12_in, -90_deg)
   // odometry->setState(convertState({36_in, 12_in, -90_deg}));
-  odometry->setState(convertState({0_in, 0_in, -90_deg}));
+  odometry->setState(convertState({32_in, 12_in, -90_deg}));
 
   // chassis->runPath(generatePathTo({{36_in, 10_in, -90_deg}}));
   // chassis->runPath(fastGen.generate({{0,0,0},{0.6096,0,0}}));
   // chassis->runPath(generatePath({{0_in,0_in,0_deg}, {24_in,0_in,45_deg},
   // {24_in, 24_in, 90_deg}}, fastGen));
   chassis->driveDistance(2_in);
-  chassis->waitUntilSettled();
-  // intake.move_relative(180 / ((36.0 / 84.0) * (12.0 / 24.0)), 200);
-  chassis->driveDistance(-2_in);
-  chassis->waitUntilSettled();
-  chassis->turnToAngle(100.5_deg);
-  chassis->waitUntilSettled();
-  shoot();
-  shoot();
-  chassis->turnToAngle(45_deg);
-  chassis->waitUntilSettled();
-  chassis->driveDistance(34_in);
-  chassis->waitUntilSettled();
-  chassis->turnToAngle(115.5_deg);
-  chassis->waitUntilSettled();
-  shoot();
-  shoot();
-  shoot();
-  chassis->turnToAngle(45_deg);
-  chassis->waitUntilSettled();
-  // chassis->driveDistance(102_in);
-  // chassis->waitUntilSettled();
-  // chassis->turnToAngle(0_deg);
-  // chassis->waitUntilSettled();
-
-  // //chassis->runPath(generatePathTo({{36_in, 12_in, -90_deg}}));
-  // chassis->runPath(generatePath({{2_in,0_in,0_deg},{0_in,0_in,0_deg}}));
-
-  // chassis.turnToAngle(90_deg);
-  // chassis.waitUntilSettled();
-  // while (true) {
-  //   display.setPosition(getConvertedState(odometry));
-  //   pros::delay(10);
-  // }
-
-  // pros::delay(750);
-  // chassis->moveDistance(-4_in);
-  // chassis->turnAngle(185_deg);
-
-  // flywheel->waitUntilSettled();
-  // cylinder.set_value(true);
-  // pros::delay(300);
-  // cylinder.set_value(false);
-
-  // flywheel->waitUntilSettled();
-  // cylinder.set_value(true);
-  // pros::delay(300);
-  // cylinder.set_value(false);
-
-  // flywheel->setTarget(0);
+  // Turn the roller
+  intake->flipRaw(90_deg);
+  intake->waitUntilSettled();
+  chassis->driveToPoint({32_in, 12_in}, true);
+  chassis->turnToPoint(targetPoint);
+  shoot(2);
+  chassis->driveToPoint({2.5_tile, 1.5_tile});
+  chassis->turnToPoint(targetPoint);
+  shoot(3);
+  chassis->driveToPoint({4.5_tile, 3.5_tile});
+  chassis->turnToPoint(targetPoint);
+  shoot(3);
+  chassis->driveToPoint({5.5_tile,4.7_tile});
+  chassis->turnToAngle(0_deg);
+  chassis->driveDistance(4_in);
+  //Turn the roller
+  intake->flipRaw(90_deg);
+  intake->waitUntilSettled();
+  chassis->driveToPoint({5.5_tile,4.7_tile}, true);
+  chassis->turnToAngle(180_deg);
 }
 
 void opcontrol() {
