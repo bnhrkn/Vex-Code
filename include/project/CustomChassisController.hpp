@@ -17,7 +17,11 @@ public:
 
   void turnToAngle(okapi::QAngle angle);
 
+  void turnToPoint(okapi::Point point);
+
   void driveDistance(okapi::QLength distance);
+
+  void driveToPoint(okapi::Point point, bool reverse = false);
 
   bool isSettled();
 

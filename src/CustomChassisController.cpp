@@ -1,6 +1,7 @@
 #include "project/CustomChassisController.hpp"
 #include "project/algorithms.hpp"
 #include <cmath>
+#include "okapi/api/odometry/odomMath.hpp"
 using namespace okapi::literals;
 
 CustomChassisController::CustomChassisController(
@@ -208,6 +209,20 @@ void CustomChassisController::driveDistance(okapi::QLength distance) {
   // Angle target remains the same
   mode.store(MovementType::straight);
   movementTask.resume();
+}
+
+void CustomChassisController::turnToPoint(okapi::Point point){
+  auto angle = okapi::OdomMath::computeAngleToPoint(point, getConvertedState(odom));
+  turnToAngle(angle);
+  waitUntilSettled();
+}
+
+void CustomChassisController::driveToPoint(okapi::Point point, bool reverse){ // TODO: when angle is closer to the back, reverse
+  auto data = okapi::OdomMath::computeDistanceAndAngleToPoint(point, getConvertedState(odom));
+  turnToAngle(reverse ? okapi::OdomMath::constrainAngle360(data.second + 180_deg) : data.second);
+  waitUntilSettled();
+  driveDistance(reverse ? -data.first : data.first);
+  waitUntilSettled();
 }
 
 void CustomChassisController::cancelMovement(){
