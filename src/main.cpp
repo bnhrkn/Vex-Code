@@ -215,54 +215,43 @@ void autonomous() {
 void opcontrol() {
   using std::literals::string_literals::operator""s;
 
-  pros::Task matchTimer{[&] {
-    okapi::ControllerButton expand(okapi::ControllerDigital::Y);
-    pros::ADIDigitalOut cylinder(3, false);
-    controller.rumble("-"s); // Match start rumble
-    pros::delay(95000);      // Delay until 1:35
-    controller.rumble("-"s); // Rumble on endgame start at 1:35
-    while (true) {
-      if (expand.changedToPressed()) {
-        cylinder.set_value(true);
-      }
-    }
-  }};
-
-  pros::Task trigger{[&] { // Task for the disc shooter trigger
+  pros::Task trigger([=]() {
     pros::ADIDigitalOut cylinder(1, false);
     okapi::ControllerButton trigger(okapi::ControllerDigital::R2);
-    int count = 0;
-    while (true) {
-      if (trigger.isPressed() && flywheel->isSettled()) {
-        controller.setText(1, 0, std::to_string(++count));
-
+    int shotCount = 0;
+    while (!pros::Task::notify_take(true, 10)) {
+      if (trigger.changedToPressed() && flywheel->isSettled()) {
+        controller.setText(1, 0, std::to_string(++shotCount));
         cylinder.set_value(true);
         pros::delay(300);
         cylinder.set_value(false);
       }
-      pros::delay(10);
-    }
-  }};
-
-  pros::Task tilter([=] {
-    flywheel->setTarget(505); // 0.885
-    // flywheel->setTarget(600 * 0.80); // 0.87 far shot normal 42 deg / 30
-    okapi::ControllerButton up(okapi::ControllerDigital::X);
-    okapi::ControllerButton down(okapi::ControllerDigital::B);
-    // pros::ADIDigitalOut cyl(2, true);
-    pros::ADIDigitalOut cyl(2, false);
-    bool high = true;
-    while (true) {
-      if (up.changedToPressed() && !high) {
-        high = true;
-        flywheel->setTarget(505);
-      } else if (down.changedToPressed() && high) {
-        high = false;
-        flywheel->setTarget(400);
-      }
-      pros::delay(20);
     }
   });
+
+  pros::c::task_notify_when_deleting(
+      pros::c::task_get_current(), (pros::task_t)trigger, 1,
+      pros::notify_action_e_t::E_NOTIFY_ACTION_OWRITE);
+
+  std::atomic_bool canExpand = false;
+  pros::Task timer([=, &canExpand]() {
+    pros::delay(95000);
+    canExpand = true;
+    controller.rumble("-"s);
+  });
+
+  pros::c::task_notify_when_deleting(
+      pros::c::task_get_current(), (pros::task_t)timer, 1,
+      pros::notify_action_e_t::E_NOTIFY_ACTION_OWRITE);
+
+  controller.rumble("-"s); // Match start rumble
+  okapi::ControllerButton expandBtn(okapi::ControllerDigital::Y);
+  pros::ADIDigitalOut expandCylinder(3, false);
+
+  flywheel->setTarget(505);
+  okapi::ControllerButton up(okapi::ControllerDigital::X);
+  okapi::ControllerButton down(okapi::ControllerDigital::B);
+  bool high = true;
 
   okapi::ControllerButton pidSelector(okapi::ControllerDigital::R1);
   okapi::ControllerButton incPrecision(okapi::ControllerDigital::A);
@@ -291,6 +280,18 @@ void opcontrol() {
 
   while (true) {
 
+    if (expandBtn.changedToPressed() && canExpand) {
+      expandCylinder.set_value(true);
+    }
+
+    if (up.changedToPressed() && !high) {
+      high = true;
+      flywheel->setTarget(505);
+    } else if (down.changedToPressed() && high) {
+      high = false;
+      flywheel->setTarget(400);
+    }
+
     if (dec.changedToPressed())
       bruh.dec();
     if (inc.changedToPressed())
@@ -302,7 +303,7 @@ void opcontrol() {
     if (pidSelector.changedToPressed()) {
       bruh.nextGain();
     }
-    
+
     if (controller[okapi::ControllerDigital::down].changedToPressed())
       intake->toggleManualMode();
     if (controller[okapi::ControllerDigital::right].changedToPressed())
