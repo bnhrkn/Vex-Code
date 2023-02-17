@@ -14,6 +14,7 @@ public:
   void toggleManualMode();
   void setEnabledMode(bool enabled);
   void toggleEnabledMode();
+  void flipRaw(okapi::QAngle amount);
   void waitUntilSettled(uint32_t timeoutMillis = TIMEOUT_MAX);
   bool isSettled();
 

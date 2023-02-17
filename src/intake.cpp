@@ -48,7 +48,8 @@ void Intake::taskFunction() {
 
     auto hue = rollerSensor.get_hue();
     auto prox = rollerSensor.get_proximity();
-    std::cout << "Torque: " << intakeMotor.get_torque() << " Filtered: " << torqueFilter.getOutput() << std::endl;
+    std::cout << "Torque: " << intakeMotor.get_torque()
+              << " Filtered: " << torqueFilter.getOutput() << std::endl;
     if (jamDebounce.get() < 10 && intakeMotor.get_torque() > 1.0) {
       intakeMotor.move_velocity(-200);
       pros::delay(200);
@@ -64,25 +65,26 @@ void Intake::taskFunction() {
   }
 }
 
-void Intake::toggleEnabledMode(){
-    setEnabledMode(!enabled);
+void Intake::toggleEnabledMode() { setEnabledMode(!enabled); }
+
+void Intake::toggleManualMode() { setManualMode(!manual); }
+void Intake::setManualMode(bool manual) { Intake::manual = manual; }
+void Intake::setEnabledMode(bool enabled) { Intake::enabled = enabled; }
+
+// Positive values flip roller upwards
+void Intake::flipRaw(okapi::QAngle amount) {
+  internalTask.suspend();
+  while (internalTask.get_state() != pros::E_TASK_STATE_SUSPENDED)
+    pros::delay(10);
+  intakeMotor.move_relative(
+      amount.convert(okapi::degree) / ((36.0 / 84.0) * (12.0 / 24.0)), 200);
+  internalTask.resume();
 }
 
-void Intake::toggleManualMode(){
-    setManualMode(!manual);
-}
-void Intake::setManualMode(bool manual){
-    Intake::manual = manual;
-}
-void Intake::setEnabledMode(bool enabled){
-    Intake::enabled = enabled;
-}
-bool Intake::isSettled(){
-    return intakeMotor.get_power() == 0.0;
-}
-void Intake::waitUntilSettled(uint32_t timeoutMillis){
-    auto now = pros::millis();
-    while(!isSettled() && pros::millis() - now < timeoutMillis){
-        pros::delay(10);
-    }
+bool Intake::isSettled() { return intakeMotor.get_voltage() == 0.0; }
+void Intake::waitUntilSettled(uint32_t timeoutMillis) {
+  auto now = pros::millis();
+  while (!isSettled() && pros::millis() - now < timeoutMillis) {
+    pros::delay(10);
+  }
 }
