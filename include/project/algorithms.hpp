@@ -31,12 +31,21 @@ auto chassisToTankSpeeds(const ChassisSpeeds speeds,
     -> TankSpeeds;
 auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
     -> okapi::OdomState;
+auto getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry) -> okapi::Point;
 auto convertState(const okapi::OdomState &state) -> okapi::OdomState;
 
 auto rotateAroundOrigin(const okapi::OdomState &frame,
                         const okapi::QAngle &angle) -> okapi::OdomState;
 auto translatePoint(const okapi::OdomState &frame,
                     const okapi::OdomState &delta) -> okapi::OdomState;
+auto translatePoint(const okapi::Point &point, const okapi::Point &delta) -> okapi::Point;
+
+auto angleToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QAngle;
+
+auto distanceToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QLength;
+
+auto distanceCalcRPM(const okapi::QLength &distance) -> okapi::QAngularSpeed;
+
 
 template <typename T>
   requires std::three_way_comparable<T> && std::is_signed_v<T>
@@ -63,6 +72,17 @@ protected:
   T process;
   T output;
   std::uint32_t time = 0;
+};
+
+template <typename T>
+  requires std::three_way_comparable<T>
+class changeLimiter {
+  public:
+  changeLimiter(T maxChange, T initValue);
+
+  protected:
+  const T maxChange;
+
 };
 
 auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
