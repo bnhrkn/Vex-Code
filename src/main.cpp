@@ -153,37 +153,64 @@ void autonomous() {
 
   flywheel->setTarget(505);
 
-  // X is pos horizontal, Y is pos vertical, theta is pos counterclockwise and 0
-  // is on x axis
-  // Begin at (36_in, 12_in, -90_deg)
-  // odometry->setState(convertState({36_in, 12_in, -90_deg}));
-  odometry->setState(convertState({32_in, 12_in, -90_deg}));
-
-  // chassis->runPath(generatePathTo({{36_in, 10_in, -90_deg}}));
-  // chassis->runPath(fastGen.generate({{0,0,0},{0.6096,0,0}}));
-  // chassis->runPath(generatePath({{0_in,0_in,0_deg}, {24_in,0_in,45_deg},
-  // {24_in, 24_in, 90_deg}}, fastGen));
-  chassis->driveDistance(2_in);
-  // Turn the roller
-  intake->flipRaw(90_deg);
-  intake->waitUntilSettled();
-  chassis->driveToPoint({32_in, 12_in}, true);
-  chassis->turnToPoint(targetPoint);
-  shoot(2);
-  chassis->driveToPoint({2.5_tile, 1.5_tile});
-  chassis->turnToPoint(targetPoint);
-  shoot(3);
-  chassis->driveToPoint({4.5_tile, 3.5_tile});
-  chassis->turnToPoint(targetPoint);
-  shoot(3);
-  chassis->driveToPoint({5.5_tile,4.7_tile});
-  chassis->turnToAngle(0_deg);
-  chassis->driveDistance(4_in);
-  //Turn the roller
-  intake->flipRaw(90_deg);
-  intake->waitUntilSettled();
-  chassis->driveToPoint({5.5_tile,4.7_tile}, true);
-  chassis->turnToAngle(180_deg);
+  switch (display.getAuton()) {
+  case 1: // Full Cross Field from left
+    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    chassis->driveDistance(2_in);
+    // Turn the roller
+    intake->flipRaw(90_deg);
+    intake->waitUntilSettled();
+    chassis->driveToPoint({32_in, 12_in}, true);
+    chassis->turnToPoint(targetPoint);
+    shoot(2);
+    chassis->driveToPoint({2.5_tile, 1.5_tile});
+    chassis->turnToPoint(targetPoint);
+    shoot(3);
+    chassis->driveToPoint({4.5_tile, 3.5_tile});
+    chassis->turnToPoint(targetPoint);
+    shoot(3);
+    chassis->driveToPoint({5.5_tile, 4.7_tile});
+    chassis->turnToAngle(0_deg);
+    chassis->driveDistance(4_in);
+    // Turn the roller
+    intake->flipRaw(90_deg);
+    intake->waitUntilSettled();
+    chassis->driveToPoint({5.5_tile, 4.7_tile}, true);
+    chassis->turnToAngle(180_deg);
+    break;
+  case 2: // Right side full
+    break;
+  case 3: // Right roller only
+    break;
+  case 4: // Left roller
+    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    chassis->driveDistance(2_in);
+    // Turn the roller
+    intake->flipRaw(90_deg);
+    intake->waitUntilSettled();
+    chassis->driveToPoint({32_in, 12_in}, true);
+    chassis->turnToPoint(targetPoint);
+    shoot(2);
+    break;
+  case 5: // Left full
+    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    chassis->driveDistance(2_in);
+    // Turn the roller
+    intake->flipRaw(90_deg);
+    intake->waitUntilSettled();
+    chassis->driveToPoint({32_in, 12_in}, true);
+    chassis->turnToPoint(targetPoint);
+    shoot(2);
+    chassis->driveToPoint({2.5_tile, 1.5_tile});
+    chassis->turnToPoint(targetPoint);
+    shoot(3);
+    chassis->driveToPoint({4.5_tile, 3.5_tile});
+    chassis->turnToPoint(targetPoint);
+    shoot(3);
+    break;
+  default: // Disabled or unkown index
+    break;
+  }
 }
 
 void opcontrol() {

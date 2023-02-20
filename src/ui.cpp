@@ -20,7 +20,7 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   autonTab = lv_tabview_add_tab(tabView, "Auto");
   autonRoller = lv_roller_create(autonTab, NULL);
   
-  lv_roller_set_options(autonRoller, "Disabled\nAuton 1\n");
+  lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full");
   lv_roller_set_action(autonRoller, NULL);
 
   colorRoller = lv_roller_create(autonTab, NULL);
