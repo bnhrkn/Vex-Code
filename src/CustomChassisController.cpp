@@ -1,7 +1,7 @@
 #include "project/CustomChassisController.hpp"
+#include "okapi/api/odometry/odomMath.hpp"
 #include "project/algorithms.hpp"
 #include <cmath>
-#include "okapi/api/odometry/odomMath.hpp"
 using namespace okapi::literals;
 
 CustomChassisController::CustomChassisController(
@@ -143,7 +143,7 @@ void CustomChassisController::movementLoop() {
         if (distancePID->isSettled())
           break;
 
-         //model->driveVector(distancePID->getOutput(), turnPID->getOutput());
+        // model->driveVector(distancePID->getOutput(), turnPID->getOutput());
         model->forward(distancePID->getOutput());
         pros::Task::delay_until(prev.get(), 10);
       }
@@ -211,21 +211,21 @@ void CustomChassisController::driveDistance(okapi::QLength distance) {
   movementTask.resume();
 }
 
-void CustomChassisController::turnToPoint(okapi::Point point){
-  auto angle = okapi::OdomMath::computeAngleToPoint(point, getConvertedState(odom));
-  turnToAngle(angle);
+void CustomChassisController::turnToPoint(okapi::Point point) {
+  turnToAngle(angleToPoint(point, getConvertedPoint(odom)));
   waitUntilSettled();
 }
 
-void CustomChassisController::driveToPoint(okapi::Point point, bool reverse){ // TODO: when angle is closer to the back, reverse
-  auto data = okapi::OdomMath::computeDistanceAndAngleToPoint(point, getConvertedState(odom));
-  turnToAngle(reverse ? okapi::OdomMath::constrainAngle360(data.second + 180_deg) : data.second);
-  waitUntilSettled();
-  driveDistance(reverse ? -data.first : data.first);
+void CustomChassisController::driveToPoint(
+    okapi::Point point,
+    bool reverse) { // TODO: when angle is closer to the back, reverse
+  turnToPoint(point);
+  auto distance = distanceToPoint(point, getConvertedPoint(odom));
+  driveDistance(reverse ? -distance : distance);
   waitUntilSettled();
 }
 
-void CustomChassisController::cancelMovement(){
+void CustomChassisController::cancelMovement() {
   printf("Cancelling movement\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
