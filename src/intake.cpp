@@ -48,8 +48,8 @@ void Intake::taskFunction() {
 
     auto hue = rollerSensor.get_hue();
     auto prox = rollerSensor.get_proximity();
-    std::cout << "Torque: " << intakeMotor.get_torque()
-              << " Filtered: " << torqueFilter.getOutput() << std::endl;
+    // std::cout << "Torque: " << intakeMotor.get_torque()
+    //           << " Filtered: " << torqueFilter.getOutput() << std::endl;
     if (jamDebounce.get() < 10 && intakeMotor.get_torque() > 1.0) {
       intakeMotor.move_velocity(-200);
       pros::delay(200);
