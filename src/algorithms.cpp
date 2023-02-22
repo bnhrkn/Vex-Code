@@ -105,11 +105,11 @@ auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
   return convertState(odometry->getState());
 }
 
-auto getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry) -> okapi::Point{
+auto getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry)
+    -> okapi::Point {
   auto state = getConvertedState(odometry);
   return {state.x, state.y};
 }
-
 
 auto convertState(const okapi::OdomState &state) -> okapi::OdomState {
   return {state.y, state.x, 90_deg - state.theta};
@@ -134,21 +134,31 @@ auto translatePoint(const okapi::OdomState &frame,
 }
 auto translatePoint(const okapi::Point &point, const okapi::Point &delta)
     -> okapi::Point {
-  return { point.x - delta.x, point.y - delta.y };
+  return {point.x - delta.x, point.y - delta.y};
 }
 
-auto angleToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QAngle {
+auto angleToPoint(const okapi::Point &destination, const okapi::Point &origin)
+    -> okapi::QAngle {
   auto point = translatePoint(destination, origin);
-  return std::atan2(point.y.convert(1_m),point.x.convert(1_m)) * okapi::radian;
+  return std::atan2(point.y.convert(1_m), point.x.convert(1_m)) * okapi::radian;
 }
 
-auto distanceToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QLength{
+auto distanceToPoint(const okapi::Point &destination,
+                     const okapi::Point &origin) -> okapi::QLength {
   auto point = translatePoint(destination, origin);
   return std::hypot(point.x.convert(1_m), point.y.convert(1_m)) * 1_m;
 }
 
-auto distanceCalcRPM(const okapi::QLength &distance) -> okapi::QAngularSpeed{
+auto distanceCalcRPM(const okapi::QLength &distance) -> okapi::QAngularSpeed {
   auto d = distance.convert(1_in) - 8;
-  //646 + -15.3x + 0.307x^2 + -2.37E-03x^3 + 6.65E-06x^4
-  return (656 - 15.3 * d + 0.307 * std::pow(d,2) -2.37E-03 * std::pow(d, 3) + 6.65E-06 * std::pow(d, 4)) * 1_rpm;
+  // 350 + 0.78x + 5.86E-03x^2
+  return (350 + 0.78 * d + 5.86E-3 * std::pow(d, 2)) * okapi::rpm;
 }
+
+lowPassFilter::lowPassFilter(double cutoffFreq, double deltaTime)
+    : ePow(1 -
+           std::exp(-deltaTime / 1000 * 2 * std::numbers::pi * cutoffFreq)){};
+double lowPassFilter::filter(double value) {
+  return output += (value - output) * ePow;
+}
+double lowPassFilter::getOutput() const { return output; }

@@ -24,28 +24,48 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
                       const squiggles::ProfilePoint &goalPoint, double b,
                       double zeta);
 
-auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
-auto chassisToTankSpeeds(const ChassisSpeeds speeds,
-                         const okapi::ChassisScales scales,
-                         const okapi::AbstractMotor::GearsetRatioPair)
-    -> TankSpeeds;
-auto getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
+[[nodiscard]] auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
+[[nodiscard]] auto
+chassisToTankSpeeds(const ChassisSpeeds speeds,
+                    const okapi::ChassisScales scales,
+                    const okapi::AbstractMotor::GearsetRatioPair) -> TankSpeeds;
+[[nodiscard]] auto
+getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
     -> okapi::OdomState;
-auto getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry) -> okapi::Point;
-auto convertState(const okapi::OdomState &state) -> okapi::OdomState;
+[[nodiscard]] auto
+getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry)
+    -> okapi::Point;
+[[nodiscard]] auto convertState(const okapi::OdomState &state)
+    -> okapi::OdomState;
 
-auto rotateAroundOrigin(const okapi::OdomState &frame,
-                        const okapi::QAngle &angle) -> okapi::OdomState;
-auto translatePoint(const okapi::OdomState &frame,
-                    const okapi::OdomState &delta) -> okapi::OdomState;
-auto translatePoint(const okapi::Point &point, const okapi::Point &delta) -> okapi::Point;
+[[nodiscard]] auto rotateAroundOrigin(const okapi::OdomState &frame,
+                                      const okapi::QAngle &angle)
+    -> okapi::OdomState;
+[[nodiscard]] auto translatePoint(const okapi::OdomState &frame,
+                                  const okapi::OdomState &delta)
+    -> okapi::OdomState;
+[[nodiscard]] auto translatePoint(const okapi::Point &point,
+                                  const okapi::Point &delta) -> okapi::Point;
 
-auto angleToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QAngle;
+[[nodiscard]] auto angleToPoint(const okapi::Point &destination,
+                                const okapi::Point &origin) -> okapi::QAngle;
 
-auto distanceToPoint(const okapi::Point &destination, const okapi::Point &origin) -> okapi::QLength;
+[[nodiscard]] auto distanceToPoint(const okapi::Point &destination,
+                                   const okapi::Point &origin)
+    -> okapi::QLength;
 
-auto distanceCalcRPM(const okapi::QLength &distance) -> okapi::QAngularSpeed;
+[[nodiscard]] auto distanceCalcRPM(const okapi::QLength &distance)
+    -> okapi::QAngularSpeed;
 
+template <typename T>
+  requires std::is_signed_v<T>
+[[nodiscard]] auto mapIntoRange(const double value,
+                                const std::pair<T, T> fromRange,
+                                const std::pair<T, T> toRange) {
+  return (toRange.second - toRange.first) * (value - fromRange.first) /
+             (fromRange.second - fromRange.min) +
+         toRange.first;
+}
 
 template <typename T>
   requires std::three_way_comparable<T> && std::is_signed_v<T>
@@ -55,7 +75,7 @@ public:
       : changeThreshold(changeThreshold), timeThreshold(timeThreshold),
         process(initValue), output(process) {}
 
-  T get() { return output; }
+  [[nodiscard]] T get() const { return output; }
 
   void poll(T value) {
     if (std::abs(value - process) > changeThreshold) {
@@ -77,15 +97,47 @@ protected:
 template <typename T>
   requires std::three_way_comparable<T>
 class changeLimiter {
-  public:
-  changeLimiter(T maxChange, T initValue);
+public:
+  changeLimiter(T maxChangePerSec, T initValue = 0)
+      : maxChangePerSec(maxChangePerSec), prevValue(initValue),
+        prevTime(pros::millis()){};
+  T filter(T value) {
+    auto dt = pros::millis() - prevTime;
+    auto change = value - prevValue;
+    auto scaledChange = change * 1000 / dt;
+    prevValue = value;
+    prevTime = pros::millis();
+    return prevValue + std::clamp(value, -maxChangePerSec, maxChangePerSec);
+  };
+  T filterIncrease(T value) {
+    auto dt = pros::millis() - prevTime;
+    auto change = value - prevValue;
+    auto scaledMaxChange = maxChangePerSec * dt / 1000.0;
+    prevValue = value;
+    prevTime = pros::millis();
+    return prevValue +
+           (change >= scaledMaxChange ? scaledMaxChange : change);
+  };
+  // [[nodiscard]] T getOutput() const;
 
-  protected:
-  const T maxChange;
-
+protected:
+  const T maxChangePerSec;
+  T prevValue = 0;
+  std::uint32_t prevTime;
 };
 
 auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
   auto minMax = std::minmax(range.first, range.second);
   return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
+};
+
+class lowPassFilter {
+public:
+  lowPassFilter(double cutoffFreq, double deltaTime);
+  double filter(double value);
+  [[nodiscard]] double getOutput() const;
+
+protected:
+  double output = 0;
+  const double ePow;
 };
