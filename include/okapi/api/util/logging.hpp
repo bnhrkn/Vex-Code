@@ -16,10 +16,10 @@
 #include "okapi/impl/util/timer.hpp"
 #endif
 
-#define LOG_DEBUG(msg) logger->debug([=, *this]() { return msg; })
-#define LOG_INFO(msg) logger->info([=, *this]() { return msg; })
-#define LOG_WARN(msg) logger->warn([=, *this]() { return msg; })
-#define LOG_ERROR(msg) logger->error([=, *this]() { return msg; })
+#define LOG_DEBUG(msg) logger->debug(msg)
+#define LOG_INFO(msg) logger->info(msg)
+#define LOG_WARN(msg) logger->warn(msg)
+#define LOG_ERROR(msg) logger->error(msg)
 
 #define LOG_DEBUG_S(msg) LOG_DEBUG(std::string(msg))
 #define LOG_INFO_S(msg) LOG_INFO(std::string(msg))
@@ -78,7 +78,7 @@ class Logger {
               "%ld (%s) DEBUG: %s\n",
               static_cast<long>(timer->millis().convert(millisecond)),
               CrossplatformThread::getName().c_str(),
-              ilazyMessage().c_str());
+              ilazyMessage.c_str());
     }
   }
 
@@ -93,7 +93,7 @@ class Logger {
               "%ld (%s) INFO: %s\n",
               static_cast<long>(timer->millis().convert(millisecond)),
               CrossplatformThread::getName().c_str(),
-              ilazyMessage().c_str());
+              ilazyMessage.c_str());
     }
   }
 
@@ -108,7 +108,7 @@ class Logger {
               "%ld (%s) WARN: %s\n",
               static_cast<long>(timer->millis().convert(millisecond)),
               CrossplatformThread::getName().c_str(),
-              ilazyMessage().c_str());
+              ilazyMessage.c_str());
     }
   }
 
@@ -123,7 +123,7 @@ class Logger {
               "%ld (%s) ERROR: %s\n",
               static_cast<long>(timer->millis().convert(millisecond)),
               CrossplatformThread::getName().c_str(),
-              ilazyMessage().c_str());
+              ilazyMessage.c_str());
     }
   }
 
