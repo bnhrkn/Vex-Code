@@ -20,7 +20,7 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   autonTab = lv_tabview_add_tab(tabView, "Auto");
   autonRoller = lv_roller_create(autonTab, NULL);
   
-  lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full");
+  lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full\nTest\n");
   lv_roller_set_action(autonRoller, NULL);
 
   colorRoller = lv_roller_create(autonTab, NULL);
@@ -28,6 +28,10 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   
   graphTab = lv_tabview_add_tab(tabView, "Graph");
   chart = lv_chart_create(graphTab, NULL);
+  series[0] = lv_chart_add_series(chart, LV_COLOR_BLUE);
+  series[1] = lv_chart_add_series(chart, LV_COLOR_RED);
+  lv_chart_set_point_count(chart, 500);
+  lv_chart_set_range(chart, 0, 600);
   lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
   lv_obj_set_size(chart, 460, 161);
 
@@ -78,4 +82,7 @@ int ui::getAuton() {
 }
 bool ui::isBlueTeam(){
   return !static_cast<bool>(lv_roller_get_selected(colorRoller));
+}
+void ui::graph(double value, size_t which){
+  lv_chart_set_next(chart, series[which], value);
 }

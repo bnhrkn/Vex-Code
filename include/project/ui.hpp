@@ -11,6 +11,7 @@ public:
   void setPosition(const okapi::OdomState &state);
   int getAuton();
   bool isBlueTeam();
+  void graph(double value, size_t which);
 
  
 
@@ -22,6 +23,7 @@ protected:
 
   lv_obj_t* graphTab;
   lv_obj_t* chart;
+  lv_chart_series_t* series[2];
 
   lv_obj_t* autonTab;
   lv_obj_t* autonRoller;
