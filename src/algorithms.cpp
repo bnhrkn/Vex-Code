@@ -162,3 +162,12 @@ double lowPassFilter::filter(double value) {
   return output += (value - output) * ePow;
 }
 double lowPassFilter::getOutput() const { return output; }
+
+bool DisconnectDetector::changedToConnected(){
+  auto value = !prevConnected && connected();
+  prevConnected = connected();
+  return value;
+}
+bool DisconnectDetector::connected(){
+  return pros::c::controller_is_connected(pros::E_CONTROLLER_MASTER);
+}

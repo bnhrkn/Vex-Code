@@ -76,17 +76,21 @@ public:
         process(initValue), output(process) {}
 
   [[nodiscard]] T get() const { return output; }
+  [[nodiscard]] bool isStable() const { return stable; };
 
   void poll(T value) {
     if (std::abs(value - process) > changeThreshold) {
+      stable = false;
       process = value;
       time = pros::millis();
     } else if (pros::millis() - time > timeThreshold && process != output) {
       output = process;
+      stable = true;
     }
   }
 
 protected:
+  bool stable = false;
   const T changeThreshold;
   const std::uint32_t timeThreshold;
   T process;
@@ -115,8 +119,7 @@ public:
     auto scaledMaxChange = maxChangePerSec * dt / 1000.0;
     prevValue = value;
     prevTime = pros::millis();
-    return prevValue +
-           (change >= scaledMaxChange ? scaledMaxChange : change);
+    return prevValue + (change >= scaledMaxChange ? scaledMaxChange : change);
   };
   // [[nodiscard]] T getOutput() const;
 
@@ -140,4 +143,12 @@ public:
 protected:
   double output = 0;
   const double ePow;
+};
+
+class DisconnectDetector {
+public:
+  bool changedToConnected();
+protected:
+  bool connected();
+  bool prevConnected = connected();
 };
