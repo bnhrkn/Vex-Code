@@ -18,6 +18,8 @@ public:
 
   void turnToAngle(okapi::QAngle angle);
 
+  void turnByAngle(okapi::QAngle angle);
+
   void turnToPoint(okapi::Point point, okapi::QAngle offset = 0 * okapi::degree);
 
   void driveDistance(okapi::QLength distance);

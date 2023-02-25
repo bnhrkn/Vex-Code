@@ -200,6 +200,10 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
   // pros::delay(50);
 }
 
+void CustomChassisController::turnByAngle(okapi::QAngle angle) {
+  turnToAngle(getConvertedState(odom).theta + angle);
+}
+
 void CustomChassisController::runPath(
     std::vector<squiggles::ProfilePoint> ipath) {
   printf("Sending runpath command\n");
