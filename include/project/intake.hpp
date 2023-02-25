@@ -1,5 +1,6 @@
 #pragma once
 #include "main.h"
+#include "settledUtil.hpp"
 
 using hueRange = std::pair<int,int>;
 
@@ -12,9 +13,11 @@ public:
   ~Intake();
   void setManualMode(bool manual);
   void toggleManualMode();
+  void setLoopSkip(bool shouldSkip);
   void setEnabledMode(bool enabled);
   void toggleEnabledMode();
-  void flipRaw(okapi::QAngle amount);
+  // Blocks until the motion is complete
+  void flipRaw(okapi::QAngle amount, std::uint32_t timeoutMillis = TIMEOUT_MAX);
   void waitUntilSettled(uint32_t timeoutMillis = TIMEOUT_MAX);
   bool isSettled();
 
@@ -22,6 +25,7 @@ protected:
   void taskFunction();
   std::atomic_bool manual = false;
   std::atomic_bool enabled = true;
+  std::atomic_bool shouldSkip = false;
   hueRange targetColor;
   hueRange otherColor;
   pros::Motor intakeMotor;

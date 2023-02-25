@@ -31,11 +31,20 @@ void Intake::taskFunction() {
   auto powerDebounce = debouncer(2.0, 100, 0.0);
   auto discDebounce = debouncer(int{0}, 150, distanceToDiscNum(indexerSensor));
   auto torqueFilter = okapi::AverageFilter<10>();
+  auto dropoutDetector = DisconnectDetector();
   while (!pros::Task::notify_take(true, 10)) {
     discDebounce.poll(distanceToDiscNum(indexerSensor));
     jamDebounce.poll(intakeMotor.get_efficiency());
     powerDebounce.poll(intakeMotor.get_power());
     torqueFilter.filter(intakeMotor.get_torque());
+
+    if (shouldSkip)
+      continue;
+
+    if(dropoutDetector.changedToConnected()){
+      intakeMotor.move_velocity(100);
+      pros::delay(50);
+    }
 
     if (reverseBtn.isPressed()) {
       intakeMotor.move_velocity(-200);
@@ -53,9 +62,11 @@ void Intake::taskFunction() {
     if (jamDebounce.get() < 10 && intakeMotor.get_torque() > 1.0) {
       intakeMotor.move_velocity(-200);
       pros::delay(200);
-    } else if (prox >= proxThreshold && inRange(hue, targetColor)) {
-      intakeMotor.move_velocity(0);
-    } else if (prox >= proxThreshold && inRange(hue, otherColor)) {
+    } else if (prox >= proxThreshold && inRange(hue, targetColor) &&
+               !pros::competition::is_autonomous()) {
+      intakeMotor.move_velocity(200);
+    } else if (prox >= proxThreshold && inRange(hue, otherColor) &&
+               !pros::competition::is_autonomous()) {
       intakeMotor.move_velocity(200);
     } else if (discDebounce.get() < 3 || powerDebounce.get() > 4.5) {
       intakeMotor.move_velocity(200);
@@ -70,18 +81,26 @@ void Intake::toggleEnabledMode() { setEnabledMode(!enabled); }
 void Intake::toggleManualMode() { setManualMode(!manual); }
 void Intake::setManualMode(bool manual) { Intake::manual = manual; }
 void Intake::setEnabledMode(bool enabled) { Intake::enabled = enabled; }
+void Intake::setLoopSkip(bool shouldSkip) { Intake::shouldSkip = shouldSkip; };
 
 // Positive values flip roller upwards
-void Intake::flipRaw(okapi::QAngle amount) {
+void Intake::flipRaw(okapi::QAngle amount, std::uint32_t timeoutMillis) {
+  auto start = pros::millis();
   internalTask.suspend();
-  while (internalTask.get_state() != pros::E_TASK_STATE_SUSPENDED)
-    pros::delay(10);
+  // while (internalTask.get_state() != pros::E_TASK_STATE_SUSPENDED)
+  //   pros::delay(10);
+  intakeMotor.move_velocity(0);
   intakeMotor.move_relative(
       amount.convert(okapi::degree) / ((36.0 / 84.0) * (12.0 / 24.0)), 200);
+  while(std::abs(intakeMotor.get_target_position() - intakeMotor.get_position()) > 5 && start - pros::millis() <= timeoutMillis){
+    pros::delay(10);
+  }
   internalTask.resume();
 }
 
-bool Intake::isSettled() { return intakeMotor.get_voltage() == 0.0; }
+bool Intake::isSettled() {
+  return intakeMotor.is_stopped();
+}
 void Intake::waitUntilSettled(uint32_t timeoutMillis) {
   auto now = pros::millis();
   while (!isSettled() && pros::millis() - now < timeoutMillis) {
