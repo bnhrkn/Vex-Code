@@ -19,6 +19,9 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
 
   autonTab = lv_tabview_add_tab(tabView, "Auto");
   autonRoller = lv_roller_create(autonTab, NULL);
+  lv_obj_set_size(autonRoller, lv_obj_get_width(autonTab) / 2, lv_obj_get_height(autonTab));
+  lv_obj_align(autonRoller, autonTab, LV_ALIGN_IN_RIGHT_MID, -lv_obj_get_width(autonRoller) / 2 + 5,  0);
+  
   
   lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full\nTest\n");
   lv_roller_set_action(autonRoller, NULL);
