@@ -134,7 +134,7 @@ auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
   return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
 };
 
-class lowPassFilter {
+class lowPassFilter : public okapi::Filter {
 public:
   lowPassFilter(double cutoffFreq, double deltaTime);
   double filter(double value);

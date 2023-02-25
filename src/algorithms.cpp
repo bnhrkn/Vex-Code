@@ -163,11 +163,11 @@ double lowPassFilter::filter(double value) {
 }
 double lowPassFilter::getOutput() const { return output; }
 
-bool DisconnectDetector::changedToConnected(){
+bool DisconnectDetector::changedToConnected() {
   auto value = !prevConnected && connected();
   prevConnected = connected();
   return value;
 }
-bool DisconnectDetector::connected(){
+bool DisconnectDetector::connected() {
   return pros::c::controller_is_connected(pros::E_CONTROLLER_MASTER);
 }
