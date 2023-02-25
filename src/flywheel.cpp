@@ -36,7 +36,7 @@ void Flywheel::setGains(Gains values) {
 }
 
 okapi::QAngularSpeed Flywheel::getTarget() const {
-    return target.load() * okapi::rpm;
+  return target.load() * okapi::rpm;
 }
 
 void Flywheel::setTarget(okapi::QAngularSpeed speed) {
@@ -51,6 +51,7 @@ void Flywheel::setTarget(double rpm) {
 void Flywheel::taskFunc() {
   auto velFilter = lowPassFilter(5, 10);
   velFilter.filter(motor.get_actual_velocity());
+  auto dropoutDetector = DisconnectDetector();
   // auto prevValue = motor.get_actual_velocity();
   auto prevTime = pros::millis();
   auto prevTarget = target.load();
@@ -69,16 +70,21 @@ void Flywheel::taskFunc() {
       return gains;
     }();
 
-    // prevValue = value;
     prevError = error;
     prevTarget = target.load();
 
     auto output = (kP * error) - (kD * delta) + (kF * target) + kSF;
+
+    if (dropoutDetector.changedToConnected()) {
+      std::cout << "Detected reconnect\n";
+      motor.move_voltage(200);
+      pros::delay(50);
+    }
+
     if (target != 0) {
       motor.move_voltage(output);
-    }
-    else{
-        motor.move_voltage(0);
+    } else {
+      motor.move_voltage(0);
     }
     {
       std::scoped_lock<pros::Mutex> lock(settledUtilMutex);
