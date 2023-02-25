@@ -1,5 +1,6 @@
 #pragma once
 #include "main.h"
+#include "project/algorithms.hpp"
 
 class CustomChassisController {
 public:
@@ -17,16 +18,27 @@ public:
 
   void turnToAngle(okapi::QAngle angle);
 
-  void turnToPoint(okapi::Point point);
+  void turnToPoint(okapi::Point point, okapi::QAngle offset = 0 * okapi::degree);
 
   void driveDistance(okapi::QLength distance);
 
-  void driveToPoint(okapi::Point point, bool reverse = false);
+  void driveToPoint(okapi::Point point, bool reverse = false, okapi::QLength distanceThreshold = 0 * okapi::inch);
 
+  // Delegate to the model, speed is [-1, 1], no delay or stop if no time given
+  // Will not run over closed-loop movements
+  void moveRaw(double speed, std::optional<std::uint32_t> time = std::nullopt);
+
+  // Delegate to the model, speed is [-1, 1], no delay or stop if no time given
+  // Will not run over closed-loop movements
+  void turnRaw(double speed, std::optional<std::uint32_t> time = std::nullopt);
+
+  // If the movementTask is done
   bool isSettled();
 
+  // Wait for isSettled
   void waitUntilSettled();
 
+  // Stop any open or closed-loop movements
   void cancelMovement();
 
 protected:
@@ -40,7 +52,10 @@ protected:
   pros::Task odomTask;
 
   std::shared_ptr<okapi::IterativePosPIDController> turnPID;
+  changeLimiter<double> turnLimiter{1,0};
+
   std::shared_ptr<okapi::IterativePosPIDController> distancePID;
+  changeLimiter<double> distanceLimiter{1, 0};
 
   std::shared_ptr<okapi::Odometry> odom;
 

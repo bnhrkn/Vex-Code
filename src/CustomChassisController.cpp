@@ -29,8 +29,12 @@ CustomChassisController::CustomChassisController(
 
 CustomChassisController::~CustomChassisController() {
   printf("Destructor called\n");
-  movementTask.remove();
-  odomTask.remove();
+  movementTask.notify();
+  pros::c::task_abort_delay((pros::task_t)movementTask);
+  odomTask.notify();
+  pros::c::task_abort_delay((pros::task_t)odomTask);
+  movementTask.join();
+  odomTask.join();
   model->stop();
 }
 
@@ -103,8 +107,9 @@ void CustomChassisController::movementLoop() {
         // << error.convert(1_deg)
         //           << ", Target: " << turnPID->getTarget()
         //           << ", Real Error: " << turnPID->getError() << std::endl;
+        auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
 
-        model->rotate(turnPID->getOutput());
+        model->rotate(angleOutput);
         pros::Task::delay_until(prev.get(), 10);
       }
       printf("Done Turn\n");
@@ -143,8 +148,11 @@ void CustomChassisController::movementLoop() {
         if (distancePID->isSettled())
           break;
 
+        auto distanceOutput =
+            distanceLimiter.filterIncrease(distancePID->getOutput());
+        auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
         // model->driveVector(distancePID->getOutput(), turnPID->getOutput());
-        model->forward(distancePID->getOutput());
+        model->forward(distanceOutput);
         pros::Task::delay_until(prev.get(), 10);
       }
       printf("Done Straight\n");
@@ -179,11 +187,13 @@ void CustomChassisController::waitUntilSettled() {
 }
 
 void CustomChassisController::turnToAngle(okapi::QAngle angle) {
-  printf("Sending turntoangle command\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   turnPID->reset();
   turnPID->setTarget(okapi::OdomMath::constrainAngle360(angle).convert(1_deg));
+  std::cout << "Turning to angle " << angle.convert(1_deg) << "deg by target "
+            << okapi::OdomMath::constrainAngle360(angle).convert(1_deg)
+            << "deg\n";
   mode.store(MovementType::turn);
   movementTask.resume();
   printf("done all the stuff\n");
@@ -206,21 +216,61 @@ void CustomChassisController::driveDistance(okapi::QLength distance) {
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   distancePID->reset();
   distancePID->setTarget(distance.convert(okapi::meter));
+  std::cout << "Driving distance " << distance.convert(1_in) << "in\n";
   // Angle target remains the same
   mode.store(MovementType::straight);
   movementTask.resume();
 }
 
-void CustomChassisController::turnToPoint(okapi::Point point) {
-  turnToAngle(angleToPoint(point, getConvertedPoint(odom)));
+void CustomChassisController::turnToPoint(okapi::Point point,
+                                          okapi::QAngle offset) {
+  std::cout << "Turning to point (" << point.x.convert(1_in) << ", "
+            << point.y.convert(1_in) << ") from ("
+            << getConvertedPoint(odom).x.convert(1_in) << ", "
+            << getConvertedPoint(odom).y.convert(1_in) << ")\n";
+  turnToAngle(angleToPoint(point, getConvertedPoint(odom)) + offset);
   waitUntilSettled();
 }
 
+void CustomChassisController::moveRaw(double speed,
+                                      std::optional<std::uint32_t> time) {
+  if (!isSettled())
+    return;
+
+  model->forward(speed);
+
+  if (time.has_value()) {
+    pros::delay(time.value());
+    cancelMovement();
+  }
+}
+
+void CustomChassisController::turnRaw(double speed,
+                                      std::optional<std::uint32_t> time) {
+  if (!isSettled())
+    return;
+
+  model->rotate(-speed);
+
+  if (time.has_value()) {
+    pros::delay(time.value());
+    cancelMovement();
+  }
+}
+
 void CustomChassisController::driveToPoint(
-    okapi::Point point,
-    bool reverse) { // TODO: when angle is closer to the back, reverse
-  turnToPoint(point);
+    okapi::Point point, bool reverse,
+    okapi::QLength
+        distanceThreshold) { // TODO: when angle is closer to the back, reverse
+  if (distanceToPoint(point, getConvertedPoint(odom)) < distanceThreshold)
+    return;
+
+  turnToPoint(point, static_cast<int>(reverse) * 180_deg);
   auto distance = distanceToPoint(point, getConvertedPoint(odom));
+  std::cout << "Driving " << distance.convert(1_in) << "in to point ("
+            << point.x.convert(1_in) << ", " << point.y.convert(1_in)
+            << ") from (" << getConvertedPoint(odom).x.convert(1_in) << ", "
+            << getConvertedPoint(odom).y.convert(1_in) << ")\n";
   driveDistance(reverse ? -distance : distance);
   waitUntilSettled();
 }
@@ -230,4 +280,5 @@ void CustomChassisController::cancelMovement() {
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   waitUntilSettled();
+  model->stop();
 }
