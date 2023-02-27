@@ -23,7 +23,7 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   lv_obj_align(autonRoller, autonTab, LV_ALIGN_IN_RIGHT_MID, -lv_obj_get_width(autonRoller) / 2 + 5,  0);
   
   
-  lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full\nTest\n");
+  lv_roller_set_options(autonRoller, "Disabled\nCross Field\nRight Full\nRight Roller\nLeft Roller\nLeft Full\nProg Skills\nTest\n");
   lv_roller_set_action(autonRoller, NULL);
 
   colorRoller = lv_roller_create(autonTab, NULL);
