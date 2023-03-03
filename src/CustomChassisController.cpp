@@ -8,14 +8,14 @@ CustomChassisController::CustomChassisController(
     std::shared_ptr<okapi::ChassisModel> imodel,
     std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
     std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
-    std::shared_ptr<okapi::Odometry> iodom, okapi::ChassisScales ichassisScales,
+    std::shared_ptr<CustomOdom> iodom, okapi::ChassisScales ichassisScales,
     okapi::AbstractMotor::GearsetRatioPair idriveRatio)
     : movementTask([this]() { movementLoop(); }),
       odomTask([this]() { odomLoop(); }), turnPID(iturnPID),
       distancePID(idistancePID), odom(iodom), model(imodel),
       chassisScales(ichassisScales), driveRatio(idriveRatio) {
   turnPID->setTarget(
-      okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta)
+      okapi::OdomMath::constrainAngle360(odom->getState().theta)
           .convert(1_deg));
   distancePID->setTarget(0);
   // pros::c::task_notify_when_deleting(
@@ -62,12 +62,12 @@ void CustomChassisController::movementLoop() {
         // printf("Running path\n");
         // std::cout << "Command Position: " << point.vector.pose.x <<
         // std::endl;
-        //  std::cout << "Actual Positin" << getConvertedState(odom).str(1_in,
+        //  std::cout << "Actual Positin" << odom->getState().str(1_in,
         //  "") << std::endl;
 
         // Do all the pathy stuff
         const auto speeds =
-            ramsete(stateToPose(getConvertedState(odom)), point, 2.0, 0.7);
+            ramsete(stateToPose(odom->getState()), point, 2.0, 0.7);
         const auto [left, right] =
             chassisToTankSpeeds(speeds, chassisScales, driveRatio);
         // std::cout << "left: " << left.convert(1_rpm) << ", right: " <<
@@ -92,7 +92,7 @@ void CustomChassisController::movementLoop() {
         // printf("Running turn\n");
         //   Do math to figure out the right direction to turn
         auto nowAngle =
-            okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta);
+            okapi::OdomMath::constrainAngle360(odom->getState().theta);
         auto error = okapi::OdomMath::constrainAngle180(
             turnPID->getTarget() * 1_deg - nowAngle);
         auto inputValue =
@@ -120,24 +120,24 @@ void CustomChassisController::movementLoop() {
       printf("Entered straight case\n");
       std::scoped_lock<pros::Mutex> lock(movementMutex);
       auto prev = std::make_unique<std::uint32_t>(pros::millis());
-      auto initalPos = getConvertedState(odom);
+      auto initalPos = odom->getState();
 
       while (taskValid() && mode.load() == MovementType::straight) {
         auto nowTranslatedPos =
-            translatePoint(getConvertedState(odom), initalPos);
+            translatePoint(odom->getState(), initalPos);
         auto nowRotatedPos =
             rotateAroundOrigin(nowTranslatedPos, -initalPos.theta);
         auto x = nowRotatedPos.x.convert(
             okapi::meter); // Straight distance from where we started
-        // std::cout << "InitalPos: " << initalPos.str()
-        //           << "\nTransPos: " << nowTranslatedPos.str()
-        //           << "\nrotatedPos: " << nowRotatedPos.str()
-        //           << "\nTarget: " << distancePID->getTarget() << std::endl;
+        std::cout << "InitalPos: " << initalPos.str()
+                  << "\nTransPos: " << nowTranslatedPos.str()
+                  << "\nrotatedPos: " << nowRotatedPos.str()
+                  << "\nTarget: " << distancePID->getTarget() << std::endl;
         distancePID->step(x);
 
         // Angle stuff to remain on course
         auto nowAngle =
-            okapi::OdomMath::constrainAngle360(getConvertedState(odom).theta);
+            okapi::OdomMath::constrainAngle360(odom->getState().theta);
         auto angleError = okapi::OdomMath::constrainAngle180(
             turnPID->getTarget() * 1_deg - nowAngle);
         auto angleInputValue =
@@ -201,7 +201,7 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
 }
 
 void CustomChassisController::turnByAngle(okapi::QAngle angle) {
-  turnToAngle(getConvertedState(odom).theta + angle);
+  turnToAngle(odom->getState().theta + angle);
 }
 
 void CustomChassisController::runPath(
@@ -230,9 +230,9 @@ void CustomChassisController::turnToPoint(okapi::Point point,
                                           okapi::QAngle offset) {
   std::cout << "Turning to point (" << point.x.convert(1_in) << ", "
             << point.y.convert(1_in) << ") from ("
-            << getConvertedPoint(odom).x.convert(1_in) << ", "
-            << getConvertedPoint(odom).y.convert(1_in) << ")\n";
-  turnToAngle(angleToPoint(point, getConvertedPoint(odom)) + offset);
+            << odom->getPoint().x.convert(1_in) << ", "
+            << odom->getPoint().y.convert(1_in) << ")\n";
+  turnToAngle(angleToPoint(point, odom->getPoint()) + offset);
   waitUntilSettled();
 }
 
@@ -266,15 +266,15 @@ void CustomChassisController::driveToPoint(
     okapi::Point point, bool reverse,
     okapi::QLength
         distanceThreshold) { // TODO: when angle is closer to the back, reverse
-  if (distanceToPoint(point, getConvertedPoint(odom)) < distanceThreshold)
+  if (distanceToPoint(point, odom->getPoint()) < distanceThreshold)
     return;
 
   turnToPoint(point, static_cast<int>(reverse) * 180_deg);
-  auto distance = distanceToPoint(point, getConvertedPoint(odom));
+  auto distance = distanceToPoint(point, odom->getPoint());
   std::cout << "Driving " << distance.convert(1_in) << "in to point ("
             << point.x.convert(1_in) << ", " << point.y.convert(1_in)
-            << ") from (" << getConvertedPoint(odom).x.convert(1_in) << ", "
-            << getConvertedPoint(odom).y.convert(1_in) << ")\n";
+            << ") from (" << odom->getPoint().x.convert(1_in) << ", "
+            << odom->getPoint().y.convert(1_in) << ")\n";
   driveDistance(reverse ? -distance : distance);
   waitUntilSettled();
 }

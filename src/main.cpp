@@ -41,9 +41,9 @@ auto distanceGains =
 auto flywheelGains =
     okapi::IterativeVelPIDController::Gains{400.0, 0.0, 17.4, 864.0};
 
-std::shared_ptr<okapi::ThreeEncoderSkidSteerModel> model;
+std::shared_ptr<okapi::ChassisModel> model;
 std::shared_ptr<Flywheel> flywheel;
-std::shared_ptr<okapi::ThreeEncoderOdometry> odometry;
+std::shared_ptr<CustomOdom> odometry;
 std::shared_ptr<Intake> intake;
 std::shared_ptr<CustomChassisController> chassis;
 std::shared_ptr<okapi::IterativePosPIDController> turnPID;
@@ -77,26 +77,27 @@ void initialize() {
       pros::Motor(8, pros::motor_gearset_e_t::E_MOTOR_GEAR_BLUE), flywheelGains,
       SettledUtil(1, 50, 0));
 
-  std::ranges::for_each(std::array{14, 7, 6}, pros::c::rotation_reset_position);
+  std::ranges::for_each(std::array{14, 7}, pros::c::rotation_reset_position);
 
-  model = std::make_shared<okapi::ThreeEncoderSkidSteerModel>(
+  model = std::make_shared<okapi::SkidSteerModel>(
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
           makeMotor(1, false), makeMotor(2, true), makeMotor(3, false)}),
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
           makeMotor(11, true), makeMotor(12, false), makeMotor(17, true)}),
-
-      std::make_shared<okapi::RotationSensor>(14, true),       // left
-      std::make_shared<okapi::RotationSensor>(7, false),       // right
-      std::make_shared<okapi::RotationSensor>(6), 600, 12000); // middle
-
-  model->resetSensors();
+      std::make_shared<okapi::IntegratedEncoder>(1, false),
+      std::make_shared<okapi::IntegratedEncoder>(11, true), 600, 12000);
 
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
 
-  odometry = std::make_shared<okapi::ThreeEncoderOdometry>(
-      okapi::TimeUtilFactory::createDefault(), model, odomScales);
+  auto leftRotation = std::make_shared<pros::Rotation>(14, true);
+  auto rightRotation = std::make_shared<pros::Rotation>(7, false);
+  auto imu = std::make_shared<pros::IMU>(6);
+  imu->reset(true);
 
-  odometry->setState(convertState({0_in, 0_in, -90_deg}));
+  odometry = std::make_shared<CustomOdom>(leftRotation, rightRotation, imu,
+                                          odomScales);
+
+  odometry->setState({0_in, 0_in, 0_deg});
 
   turnPID = std::make_shared<okapi::IterativePosPIDController>(
       angleGains,
@@ -147,7 +148,7 @@ void autonomous() {
   };
   auto generatePathTo = [&](std::vector<okapi::OdomState> states,
                             squiggles::SplineGenerator &generator) {
-    states.insert(states.cbegin(), getConvertedState(odometry));
+    states.insert(states.cbegin(), odometry->getState());
     return generatePath(states, generator);
   };
 
@@ -171,17 +172,17 @@ void autonomous() {
 
   auto shootToPoint = [=](okapi::Point point, std::uint32_t numshots) {
     flywheel->setTarget(
-        distanceCalcRPM(distanceToPoint(point, getConvertedPoint(odometry))));
+        distanceCalcRPM(distanceToPoint(point, odometry->getPoint())));
     chassis->turnToPoint(point, shotOffset);
     shoot(numshots);
   };
 
   switch (display.getAuton()) {
   case 1: // Full Cross Field from left
-    flywheel->setTarget(distanceCalcRPM(
-        distanceToPoint(targetPoint, getConvertedPoint(odometry))));
+    flywheel->setTarget(
+        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
     intake->setLoopSkip(true);
-    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    odometry->setState({32_in, 12_in, -90_deg});
 
     // Roller
     chassis->moveRaw(0.25, 150);
@@ -189,7 +190,7 @@ void autonomous() {
     // Shot #1
     chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
     shootToPoint(targetPoint, 2);
-    //intake->setLoopSkip(false); // Off of roller, can re-enable
+    // intake->setLoopSkip(false); // Off of roller, can re-enable
     intake->setManualMode(true);
     intake->setEnabledMode(true);
 
@@ -217,7 +218,7 @@ void autonomous() {
     chassis->turnToAngle(180_deg);
     break;
   case 2: // Right side mid
-    odometry->setState(convertState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg}));
+    odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
     intake->setLoopSkip(true);
     // Shot #1
     shootToPoint(targetPoint, 2);
@@ -236,7 +237,7 @@ void autonomous() {
     shootToPoint(targetPoint, 3);
     break;
   case 3: // Right roller only
-    odometry->setState(convertState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg}));
+    odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
     shootToPoint(targetPoint, 2);
     intake->setLoopSkip(true);
     // Roller
@@ -256,10 +257,10 @@ void autonomous() {
 
     break;
   case 5: // Left full, no right roller
-  flywheel->setTarget(distanceCalcRPM(
-        distanceToPoint(targetPoint, getConvertedPoint(odometry))));
+    flywheel->setTarget(
+        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
     intake->setLoopSkip(true);
-    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    odometry->setState({32_in, 12_in, -90_deg});
 
     // Roller
     chassis->moveRaw(0.25, 150);
@@ -279,10 +280,10 @@ void autonomous() {
     break;
   case 6: // Prog skills
 
-    flywheel->setTarget(distanceCalcRPM(
-        distanceToPoint(targetPoint, getConvertedPoint(odometry))));
+    flywheel->setTarget(
+        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
     intake->setLoopSkip(true);
-    odometry->setState(convertState({32_in, 12_in, -90_deg}));
+    odometry->setState({32_in, 12_in, -90_deg});
 
     // Roller
     chassis->moveRaw(0.25, 150);
@@ -338,7 +339,12 @@ void autonomous() {
     break;
   case 7: // Testing auton
     flywheel->setTarget(0);
-    odometry->setState(convertState({0_in, 0_in, 90_deg}));
+    odometry->setState({0_in, 0_in, 90_deg});
+    std::cout
+        << "Current State: " << odometry->getState().str()
+        << "Angle To Target: "
+        << angleToPoint({0_tile, 2_tile}, odometry->getPoint()).convert(1_deg)
+        << std::endl;
     chassis->driveToPoint({0_tile, 2_tile});
     // chassis->turnToPoint({1_tile, 1_tile});
     chassis->driveToPoint({2_tile, 2_tile});
@@ -361,6 +367,7 @@ void autonomous() {
 
 void opcontrol() {
   // #define tuning
+  // #define quiet
 
   using std::literals::string_literals::operator""s;
   controller.clear();
@@ -409,7 +416,9 @@ void opcontrol() {
   pros::ADIDigitalOut rightCyl{2, false};
 
 #ifndef tuning
+#ifndef quiet
   flywheel->setTarget(distanceCalcRPM(110_in));
+#endif
 #endif
 
 #ifdef tuning
@@ -454,7 +463,7 @@ void opcontrol() {
       intake->toggleEnabledMode();
     }
 
-    display.setPosition(getConvertedState(odometry));
+    display.setPosition(odometry->getState());
 
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   -controller.getAnalog(okapi::ControllerAnalog::rightX));

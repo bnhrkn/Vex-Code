@@ -1,6 +1,7 @@
 #pragma once
 #include "main.h"
 #include "project/algorithms.hpp"
+#include "project/customOdom.hpp"
 
 class CustomChassisController {
 public:
@@ -8,7 +9,7 @@ public:
       std::shared_ptr<okapi::ChassisModel> imodel,
       std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
       std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
-      std::shared_ptr<okapi::Odometry> iodom,
+      std::shared_ptr<CustomOdom> iodom,
       okapi::ChassisScales ichassisScales,
       okapi::AbstractMotor::GearsetRatioPair idriveRatio);
   ~CustomChassisController();
@@ -59,7 +60,7 @@ protected:
   std::shared_ptr<okapi::IterativePosPIDController> distancePID;
   changeLimiter<double> distanceLimiter{1, 0};
 
-  std::shared_ptr<okapi::Odometry> odom;
+  std::shared_ptr<CustomOdom> odom;
 
   std::shared_ptr<okapi::ChassisModel> model;
 
