@@ -29,14 +29,6 @@ ChassisSpeeds ramsete(const squiggles::Pose &nowPose,
 chassisToTankSpeeds(const ChassisSpeeds speeds,
                     const okapi::ChassisScales scales,
                     const okapi::AbstractMotor::GearsetRatioPair) -> TankSpeeds;
-[[nodiscard]] auto
-getConvertedState(const std::shared_ptr<okapi::Odometry> &odometry)
-    -> okapi::OdomState;
-[[nodiscard]] auto
-getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry)
-    -> okapi::Point;
-[[nodiscard]] auto convertState(const okapi::OdomState &state)
-    -> okapi::OdomState;
 
 [[nodiscard]] auto rotateAroundOrigin(const okapi::OdomState &frame,
                                       const okapi::QAngle &angle)
