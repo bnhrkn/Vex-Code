@@ -118,13 +118,22 @@ auto convertState(const okapi::OdomState &state) -> okapi::OdomState {
 // Rotates a vector around the origin by a certain angle
 auto rotateAroundOrigin(const okapi::OdomState &frame,
                         const okapi::QAngle &angle) -> okapi::OdomState {
-  const auto &x = frame.x;
-  const auto &y = frame.y;
-  const auto &yaw = frame.theta;
+  // const auto &x = frame.x;
+  // const auto &y = frame.y;
+  // const auto &yaw = frame.theta;
+  const auto &[x, y, yaw] = frame;
 
   const auto &radAngle = angle.convert(okapi::radian);
   return {x * std::cos(radAngle) - y * std::sin(radAngle),
           x * std::sin(radAngle) + y * std::cos(radAngle), yaw - angle};
+}
+
+auto rotateAroundOrigin(const okapi::Point &point, const okapi::QAngle &angle)
+    -> okapi::Point {
+  const auto &[x, y] = point;
+  const auto &radAngle = angle.convert(okapi::radian);
+  return {x * std::cos(radAngle) - y * std::sin(radAngle),
+          x * std::sin(radAngle) + y * std::cos(radAngle)};
 }
 
 // Translate a vector by a certain delta. Theta in delta has no effect.

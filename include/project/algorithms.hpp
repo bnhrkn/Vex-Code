@@ -41,6 +41,9 @@ getConvertedPoint(const std::shared_ptr<okapi::Odometry> &odometry)
 [[nodiscard]] auto rotateAroundOrigin(const okapi::OdomState &frame,
                                       const okapi::QAngle &angle)
     -> okapi::OdomState;
+[[nodiscard]] auto rotateAroundOrigin(const okapi::Point &point,
+                                      const okapi::QAngle &angle)
+    -> okapi::Point;
 [[nodiscard]] auto translatePoint(const okapi::OdomState &frame,
                                   const okapi::OdomState &delta)
     -> okapi::OdomState;
