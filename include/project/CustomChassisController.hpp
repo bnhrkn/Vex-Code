@@ -4,7 +4,7 @@
 #include "project/customOdom.hpp"
 
 class CustomChassisController {
-public:
+ public:
   CustomChassisController(
       std::shared_ptr<okapi::ChassisModel> imodel,
       std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
@@ -14,18 +14,28 @@ public:
       okapi::AbstractMotor::GearsetRatioPair idriveRatio);
   ~CustomChassisController();
 
-  
-  void runPath(std::vector<squiggles::ProfilePoint>); // Pass a fully formed path to follow
+  void runPath(std::vector<squiggles::ProfilePoint>);  // Pass a fully formed
+                                                       // path to follow
 
   void turnToAngle(okapi::QAngle angle);
 
   void turnByAngle(okapi::QAngle angle);
 
-  void turnToPoint(okapi::Point point, okapi::QAngle offset = 0 * okapi::degree);
+  void turnToPoint(okapi::Point point,
+                   okapi::QAngle offset = 0 * okapi::degree);
 
   void driveDistance(okapi::QLength distance);
 
-  void driveToPoint(okapi::Point point, bool reverse = false, okapi::QLength distanceThreshold = 0 * okapi::inch);
+  void driveToPoint(okapi::Point point,
+                    bool reverse = false,
+                    okapi::QLength distanceThreshold = 0 * okapi::inch);
+
+  void driveToPointByPath(okapi::OdomState destination,
+                          squiggles::SplineGenerator& generator,
+                          bool discreteTurn = false);
+
+  void drivePathFromHere(std::vector<okapi::OdomState> points,
+                         squiggles::SplineGenerator& generator);
 
   // Delegate to the model, speed is [-1, 1], no delay or stop if no time given
   // Will not run over closed-loop movements
@@ -44,8 +54,8 @@ public:
   // Stop any open or closed-loop movements
   void cancelMovement();
 
-protected:
-  enum class MovementType { disabled = 0, path = 1, turn = 2,  straight = 3};
+ private:
+  enum class MovementType { disabled = 0, path = 1, turn = 2, straight = 3 };
   std::atomic<MovementType> mode = MovementType::disabled;
 
   void movementLoop();
@@ -55,7 +65,7 @@ protected:
   pros::Task odomTask;
 
   std::shared_ptr<okapi::IterativePosPIDController> turnPID;
-  changeLimiter<double> turnLimiter{1,0};
+  changeLimiter<double> turnLimiter{1, 0};
 
   std::shared_ptr<okapi::IterativePosPIDController> distancePID;
   changeLimiter<double> distanceLimiter{1, 0};
@@ -66,7 +76,8 @@ protected:
 
   std::vector<squiggles::ProfilePoint> path;
 
-  pros::Mutex movementMutex; // Prevent overwriting current movement targets with new ones
+  pros::Mutex movementMutex;  // Prevent overwriting current movement targets
+                              // with new ones
 
   okapi::ChassisScales chassisScales;
   okapi::AbstractMotor::GearsetRatioPair driveRatio;
