@@ -1,12 +1,12 @@
 #pragma once
+#include <atomic>
 #include "main.h"
 #include "project/settledUtil.hpp"
-#include <atomic>
 
 class Flywheel {
   using Gains = okapi::IterativeVelPIDController::Gains;
 
-public:
+ public:
   Flywheel(pros::Motor motor, Gains gains, SettledUtil settledUtil);
   ~Flywheel();
   void setGains(Gains values);
@@ -17,13 +17,13 @@ public:
   bool isSettled() const;
   void waitUntilSettled(const std::uint32_t pollingRate = 10) const;
 
-protected:
+ private:
   void taskFunc();
   pros::Motor motor;
   mutable pros::Mutex settledUtilMutex;
   SettledUtil settledUtil;
   pros::Task internalTask;
-  std::atomic_int target;
+  std::atomic<double> target;
   std::atomic_uint32_t prevTime;
   mutable pros::Mutex gainsMutex;
   Gains gains;

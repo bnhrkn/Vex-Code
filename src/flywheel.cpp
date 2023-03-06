@@ -1,11 +1,15 @@
-#include "project/flywheel.hpp"
+#include <utility>
+
 #include "project/algorithms.hpp"
+#include "project/flywheel.hpp"
 
 using Gains = okapi::IterativeVelPIDController::Gains;
 
 Flywheel::Flywheel(pros::Motor motor, Gains gains, SettledUtil settledUtil)
-    : motor(motor), settledUtil(settledUtil),
-      internalTask([=, this]() { taskFunc(); }), gains(gains) {}
+    : motor(std::move(motor)),
+      settledUtil(settledUtil),
+      internalTask([=, this]() { taskFunc(); }),
+      gains(gains) {}
 
 Flywheel::~Flywheel() {
   internalTask.notify();
@@ -40,13 +44,12 @@ okapi::QAngularSpeed Flywheel::getTarget() const {
 }
 
 void Flywheel::setTarget(okapi::QAngularSpeed speed) {
-
   setTarget(speed.convert(okapi::rpm));
 }
 
 void Flywheel::setTarget(double rpm) {
   target = rpm;
-} // Need to also set prevalue to prevent derivative kick}
+}  // Need to also set prevalue to prevent derivative kick}
 
 void Flywheel::taskFunc() {
   auto velFilter = lowPassFilter(5, 10);
@@ -56,7 +59,7 @@ void Flywheel::taskFunc() {
   auto prevTime = pros::millis();
   auto prevTarget = target.load();
   auto prevError = 0.0;
-  while (!pros::Task::notify_take(true, 0)) {
+  while (pros::Task::notify_take(true, 0) == 0U) {
     auto value = velFilter.filter(motor.get_actual_velocity());
     // std::cout << "Filtered: " << value << "Real: " <<
     // motor.get_actual_velocity() << "\n";
