@@ -24,11 +24,13 @@ class CustomChassisController {
   void turnToPoint(okapi::Point point,
                    okapi::QAngle offset = 0 * okapi::degree);
 
-  void driveDistance(okapi::QLength distance);
+  void driveDistance(okapi::QLength distance, double maxSpeed = 1.0);
 
   void driveToPoint(okapi::Point point,
                     bool reverse = false,
-                    okapi::QLength distanceThreshold = 0 * okapi::inch);
+                    okapi::QLength distanceThreshold = 0 * okapi::inch,
+                    double maxSpeed = 1.0);
+  void driveToPoint(okapi::Point point, double maxSpeed);
 
   void driveToPointByPath(okapi::OdomState destination,
                           squiggles::SplineGenerator& generator,
@@ -57,6 +59,7 @@ class CustomChassisController {
  private:
   enum class MovementType { disabled = 0, path = 1, turn = 2, straight = 3 };
   std::atomic<MovementType> mode = MovementType::disabled;
+  double maxSpeed = 1.0;
 
   void movementLoop();
   void odomLoop();

@@ -115,7 +115,7 @@ auto distanceToPoint(const okapi::Point& destination,
 }
 
 auto distanceCalcRPM(const okapi::QLength& distance) -> okapi::QAngularSpeed {
-  auto d = distance.convert(1_in) - 8 + 6;
+  auto d = distance.convert(1_in) + 0;
   // 350 + 0.78x + 5.86E-03x^2
   return (350 + 0.78 * d + 5.86E-3 * std::pow(d, 2)) * okapi::rpm;
 }

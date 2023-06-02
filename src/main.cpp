@@ -1,15 +1,8 @@
 #include "main.h"
-#include "project/CustomChassisController.hpp"
-#include "project/algorithms.hpp"
-#include "project/flywheel.hpp"
-#include "project/intake.hpp"
-#include "project/pidTuner.hpp"
-#include "project/settledUtil.hpp"
-#include "project/ui.hpp"
-#include "pros/rtos.hpp"
 #include <algorithm>
 #include <atomic>
 #include <cstddef>
+#include <fstream>
 #include <functional>
 #include <iostream>
 #include <map>
@@ -18,13 +11,22 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include "project/CustomChassisController.hpp"
+#include "project/algorithms.hpp"
+#include "project/flywheel.hpp"
+#include "project/intake.hpp"
+#include "project/pidTuner.hpp"
+#include "project/settledUtil.hpp"
+#include "project/ui.hpp"
+#include "pros/rtos.hpp"
 
 using namespace okapi::literals;
 
 okapi::Controller controller;
 
 const auto ratio = okapi::AbstractMotor::GearsetRatioPair{
-    okapi::AbstractMotor::gearset::blue, 36.0 / 60.0}; // motor rpm to wheel rpm
+    okapi::AbstractMotor::gearset::blue,
+    36.0 / 60.0};  // motor rpm to wheel rpm
 const auto constraints = squiggles::Constraints(2, 2, 9);
 const auto slowConstraints = squiggles::Constraints(0.5, 2, 9);
 const auto odomScales =
@@ -58,9 +60,9 @@ void initialize() {
   };
 
   okapi::Logger::setDefaultLogger(std::make_shared<okapi::Logger>(
-      okapi::TimeUtilFactory::createDefault().getTimer(), // It needs a Timer
-      "/ser/sout",                  // Output to the PROS terminal
-      okapi::Logger::LogLevel::warn // Show errors and warnings
+      okapi::TimeUtilFactory::createDefault().getTimer(),  // It needs a Timer
+      "/ser/sout",                   // Output to the PROS terminal
+      okapi::Logger::LogLevel::warn  // Show errors and warnings
       ));
 
   std::pair<int, int> blueRange = {220, 240};
@@ -83,7 +85,7 @@ void initialize() {
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
           makeMotor(1, false), makeMotor(2, true), makeMotor(3, false)}),
       std::make_shared<okapi::MotorGroup>(okapi::MotorGroup{
-          makeMotor(11, true), makeMotor(12, false), makeMotor(17, true)}),
+          makeMotor(11, true), makeMotor(12, false), makeMotor(18, true)}),
       std::make_shared<okapi::IntegratedEncoder>(1, false),
       std::make_shared<okapi::IntegratedEncoder>(11, true), 600, 12000);
 
@@ -115,7 +117,7 @@ void initialize() {
       model, turnPID, distancePID, odometry, chassisScales, ratio);
 
   pros::delay(
-      500); // There is a race condition somewhere, sensors fail to reset.
+      500);  // There is a race condition somewhere, sensors fail to reset.
 }
 
 void disabled() {
@@ -140,37 +142,25 @@ void autonomous() {
           chassisScales.wheelTrack.convert(1_m), slowConstraints),
       0.01);
 
-  auto generatePath = [](std::vector<okapi::OdomState> states,
-                         squiggles::SplineGenerator &generator) {
-    std::vector<squiggles::Pose> poses(states.size());
-    std::ranges::transform(states, poses.begin(), stateToPose);
-    return generator.generate(poses);
-  };
-  auto generatePathTo = [&](std::vector<okapi::OdomState> states,
-                            squiggles::SplineGenerator &generator) {
-    states.insert(states.cbegin(), odometry->getState());
-    return generatePath(states, generator);
-  };
-
-  auto shoot = [&](int numTimes = 1) {
-    for (int i = 0; i < numTimes; i++) {
+  auto shoot = [&](std::size_t numTimes = 1) {
+    for (size_t i = 0; i < numTimes; i++) {
       flywheel->waitUntilSettled();
-      cylinder.set_value(true);
+      cylinder.set_value(1);
       pros::delay(300);
-      cylinder.set_value(false);
+      cylinder.set_value(0);
       pros::delay(50);
     }
   };
   constexpr const auto targetPoint = okapi::Point{17.39_in, 122.24_in};
   constexpr const auto closeTargetPoint = okapi::Point({122.24_in, 17.39_in});
   constexpr const auto rollerCrossHair = okapi::Point({110.59_in, 110.59_in});
-  constexpr const auto shotOffset = 6_deg;
-  auto flipRoller = [=](bool reverse = false) {
+  constexpr const auto shotOffset = 2_deg;
+  auto flipRoller = [=](bool reverse = false, okapi::QAngle amount = 120_deg) {
     int reverser = reverse ? -1 : 1;
-    intake->flipRaw(120_deg * reverser, 300);
+    intake->flipRaw(amount * reverser, 400);
   };
 
-  auto shootToPoint = [=](okapi::Point point, std::uint32_t numshots) {
+  auto shootToPoint = [=](okapi::Point point, std::size_t numshots) {
     flywheel->setTarget(
         distanceCalcRPM(distanceToPoint(point, odometry->getPoint())));
     chassis->turnToPoint(point, shotOffset);
@@ -178,186 +168,215 @@ void autonomous() {
   };
 
   switch (display.getAuton()) {
-  case 1: // Full Cross Field from left
-    flywheel->setTarget(
-        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
-    intake->setLoopSkip(true);
-    odometry->setState({32_in, 12_in, -90_deg});
+    case 1:  // Full Cross Field from left
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      intake->setLoopSkip(true);
+      odometry->setState({32_in, 12_in, -90_deg});
 
-    // Roller
-    chassis->moveRaw(0.25, 150);
-    flipRoller();
-    // Shot #1
-    chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
-    shootToPoint(targetPoint, 2);
-    // intake->setLoopSkip(false); // Off of roller, can re-enable
-    intake->setManualMode(true);
-    intake->setEnabledMode(true);
+      // Roller
+      chassis->moveRaw(0.25, 150);
+      flipRoller();
+      // Shot #1
+      chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
+      shootToPoint(targetPoint, 2);
+      intake->setLoopSkip(false);  // Off of roller, can re-enable
+      intake->setManualMode(true);
+      intake->setEnabledMode(true);
 
-    // // Shot #2
-    // chassis->driveToPoint({3_tile, 2_tile});
-    // shootToPoint(targetPoint, 3);
+      // // Shot #2
+      // chassis->driveToPoint({3_tile, 2_tile});
+      // shootToPoint(targetPoint, 3);
 
-    // // Shot #3
-    // chassis->driveToPoint({4.5_tile, 3.5_tile});
-    // shootToPoint(targetPoint, 3);
+      // // Shot #3
+      // chassis->driveToPoint({4.5_tile, 3.5_tile});
+      // shootToPoint(targetPoint, 3);
 
-    // To roller
-    chassis->driveToPoint({5.25_tile, 4.4_tile});
-    intake->setLoopSkip(true); // Entering roller area
-    chassis->turnToAngle(10_deg);
-    chassis->waitUntilSettled();
-    intake->setManualMode(false);
-    intake->setEnabledMode(false);
-    intake->setLoopSkip(true);
-    chassis->moveRaw(0.5, 600);
-    flipRoller();
-    // Match setup
-    // chassis->driveToPoint({5_tile, 4_tile}, true);
-    chassis->moveRaw(-0.4, 500);
-    chassis->turnToAngle(180_deg);
-    break;
-  case 2: // Right side mid
-    odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
-    intake->setLoopSkip(true);
-    // Shot #1
-    shootToPoint(targetPoint, 2);
-    // Roller
-    chassis->driveToPoint({5_tile + 14.5_in / 2, 4.6_tile});
-    chassis->turnToAngle(0_deg);
-    chassis->waitUntilSettled();
-    chassis->moveRaw(0.5, 500);
-    flipRoller();
-    // Back up
-    chassis->driveDistance(-4_in);
-    chassis->waitUntilSettled();
-    intake->setLoopSkip(false);
-    // Shot #2
-    chassis->driveToPoint({3_tile, 2_tile});
-    shootToPoint(targetPoint, 3);
-    break;
-  case 3: // Right roller only
-    odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
-    shootToPoint(targetPoint, 2);
-    intake->setLoopSkip(true);
-    // Roller
-    chassis->driveToPoint({5_tile + 14.5_in / 2, 4.6_tile});
-    chassis->turnToAngle(0_deg);
-    chassis->waitUntilSettled();
-    chassis->moveRaw(0.5, 300);
-    flipRoller();
-    // Match setup
-    chassis->driveDistance(-4_in);
-    chassis->waitUntilSettled();
-    chassis->turnToAngle(180_deg);
-    chassis->waitUntilSettled();
+      // To roller
+      chassis->driveToPoint({5.25_tile, 4.6_tile});
+      intake->setLoopSkip(true);  // Entering roller area
+      chassis->turnRaw(1, 1000);
+      chassis->turnToAngle(7.5_deg);
+      chassis->waitUntilSettled();
+      intake->setManualMode(false);
+      intake->setEnabledMode(false);
+      intake->setLoopSkip(true);
+      chassis->moveRaw(0.5, 600);
+      flipRoller();
+      // Match setup
+      // chassis->driveToPoint({5_tile, 4_tile}, true);
+      chassis->moveRaw(-0.4, 225);
+      intake->setLoopSkip(false);
 
-    break;
-  case 4: // Left roller
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      chassis->turnToPoint(targetPoint);
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      shoot(3);
+      break;
+    case 2:  // Right side mid
+      odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
+      intake->setLoopSkip(true);
+      // Shot #1
+      shootToPoint(targetPoint, 2);
+      // Roller
+      chassis->driveToPoint({5_tile + 14.5_in / 2, 4.6_tile});
+      chassis->turnToAngle(0_deg);
+      chassis->waitUntilSettled();
+      chassis->moveRaw(0.5, 500);
+      flipRoller();
+      // Back up
+      chassis->driveDistance(-4_in);
+      chassis->waitUntilSettled();
+      intake->setLoopSkip(false);
+      intake->setEnabledMode(true);
+      intake->setManualMode(false);
+      // Shot #2
+      chassis->driveToPoint({3.5_tile, 2.5_tile}, 0.7);
+      shootToPoint(targetPoint, 3);
+      // Shot #3
+      chassis->driveToPoint({2.5_tile, 1.5_tile}, 0.4);
+      shootToPoint(targetPoint, 3);
+      break;
+    case 3:  // Right roller only
+      odometry->setState({5_tile + 14.5_in / 2, 3.5_tile, 90_deg});
+      shootToPoint(targetPoint, 2);
+      intake->setLoopSkip(true);
+      // Roller
+      chassis->driveToPoint({5_tile + 14.5_in / 2, 4.6_tile});
+      chassis->turnToAngle(0_deg);
+      chassis->waitUntilSettled();
+      chassis->moveRaw(0.5, 300);
+      flipRoller();
+      // Match setup
+      chassis->driveDistance(-4_in);
+      chassis->waitUntilSettled();
+      chassis->turnToAngle(180_deg);
+      chassis->waitUntilSettled();
 
-    break;
-  case 5: // Left full, no right roller
-    flywheel->setTarget(
-        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
-    intake->setLoopSkip(true);
-    odometry->setState({32_in, 12_in, -90_deg});
+      break;
+    case 4:  // Left roller only
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      intake->setLoopSkip(true);
+      odometry->setState({32_in, 12_in, -90_deg});
 
-    // Roller
-    chassis->moveRaw(0.25, 150);
-    flipRoller();
-    // Shot #1
-    chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
-    shootToPoint(targetPoint, 2);
-    intake->setLoopSkip(false); // Off of roller, can re-enable
+      // Roller
+      chassis->moveRaw(0.25, 150);
+      flipRoller();
+      // Shot #1
+      chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
+      shootToPoint(targetPoint, 2);
+      intake->setLoopSkip(false);  // Off of roller, can re-enable
+      break;
+    case 5:  // Left mid
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      intake->setLoopSkip(true);
+      odometry->setState({32_in, 12_in, -90_deg});
 
-    // Shot #2
-    chassis->driveToPoint({3_tile, 2_tile});
-    shootToPoint(targetPoint, 3);
+      // Roller
+      chassis->moveRaw(0.25, 150);
+      flipRoller();
+      // Shot #1
+      chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
+      shootToPoint(targetPoint, 2);
+      intake->setLoopSkip(false);  // Off of roller, can re-enable
 
-    // Shot #3
-    chassis->driveToPoint({4.5_tile, 3.5_tile});
-    shootToPoint(targetPoint, 3);
-    break;
-  case 6: // Prog skills
+      // // Shot #2
+      chassis->driveToPoint({3_tile, 2_tile}, 0.4);
+      shootToPoint(targetPoint, 3);
 
-    flywheel->setTarget(
-        distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
-    intake->setLoopSkip(true);
-    odometry->setState({32_in, 12_in, -90_deg});
+      // // Shot #3
+      chassis->driveToPoint({4.5_tile, 3.5_tile}, 0.7);
+      shootToPoint(targetPoint, 3);
 
-    // Roller
-    chassis->moveRaw(0.25, 150);
-    flipRoller();
-    // Shot #1
-    chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
-    intake->setLoopSkip(false);
-    shootToPoint(closeTargetPoint, 2);
+    case 6:  // Prog skills
 
-    // Shot #2
-    chassis->driveToPoint({2.7_tile, 1.7_tile});
-    shootToPoint(closeTargetPoint, 3);
+      flywheel->setTarget(
+          distanceCalcRPM(distanceToPoint(targetPoint, odometry->getPoint())));
+      intake->setLoopSkip(true);
+      odometry->setState({32_in, 12_in, -90_deg});
 
-    // Shot #3
-    chassis->driveToPoint({4.7_tile, 3.7_tile});
-    shootToPoint(closeTargetPoint, 3);
+      // Roller
+      chassis->moveRaw(0.25, 150);
+      flipRoller(false, 220_deg);
+      intake->setLoopSkip(false);
+      // Shot #1
+      chassis->driveToPoint({32_in, 14_in}, true, 0.5_in);
+      shootToPoint(closeTargetPoint, 2);
 
-    // Rollers
-    chassis->driveToPoint(rollerCrossHair);
-    chassis->turnToAngle(0_deg);
-    intake->setLoopSkip(true);
-    chassis->waitUntilSettled();
-    chassis->moveRaw(0.5, 0.7);
-    flipRoller();
-    chassis->driveDistance(-6_in);
-    chassis->waitUntilSettled();
-    chassis->driveToPoint(rollerCrossHair, true);
+      // Shot #2
+      chassis->driveToPoint({2.7_tile, 1.7_tile});
+      shootToPoint(closeTargetPoint, 3);
 
-    chassis->turnToAngle(90_deg);
-    chassis->waitUntilSettled();
-    chassis->moveRaw(0.5, 0.7);
-    flipRoller(true);
-    chassis->driveDistance(-6_in);
-    chassis->waitUntilSettled();
-    intake->setLoopSkip(false);
+      // Shot #3
+      chassis->driveToPoint({4.7_tile, 3.7_tile});
+      shootToPoint(closeTargetPoint, 3);
 
-    chassis->driveToPoint({4.25_tile, 3.25_tile});
-    shootToPoint(targetPoint, 3);
+      // Rollers
+      chassis->driveToPoint(rollerCrossHair);
+      chassis->turnToAngle(0_deg);
+      intake->setLoopSkip(true);
+      chassis->waitUntilSettled();
+      chassis->moveRaw(0.5, 900);
+      flipRoller(false, 220_deg);
+      chassis->driveDistance(-6_in);
+      chassis->waitUntilSettled();
+      chassis->driveToPoint(rollerCrossHair, true);
 
-    chassis->driveToPoint({2.25_tile, 1.25_tile});
-    shootToPoint(targetPoint, 3);
+      chassis->turnToAngle(90_deg);
+      chassis->waitUntilSettled();
+      chassis->moveRaw(0.5, 900);
+      flipRoller(true, 220_deg);
+      chassis->driveDistance(-6_in);
+      chassis->waitUntilSettled();
+      intake->setLoopSkip(false);
 
-    chassis->driveToPoint({1_tile, 1.5_tile});
-    shootToPoint(closeTargetPoint, 3);
+      chassis->driveToPoint({4.25_tile, 3.25_tile});
+      shootToPoint(targetPoint, 3);
 
-    chassis->turnToAngle(40_deg);
-    chassis->waitUntilSettled();
-    pros::c::adi_digital_write(2, true);
-    chassis->turnToAngle(50_deg);
-    chassis->waitUntilSettled();
-    pros::c::adi_digital_write(4, true);
+      chassis->driveToPoint({2.25_tile, 1.25_tile});
+      shootToPoint(targetPoint, 3);
 
-    break;
-  case 7: // Testing auton
-    flywheel->setTarget(0);
-    odometry->setState({0_in, 0_in, 90_deg});
-    std::cout
-        << "Current State: " << odometry->getState().str()
-        << "Angle To Target: "
-        << angleToPoint({0_tile, 2_tile}, odometry->getPoint()).convert(1_deg)
-        << std::endl;
-    chassis->driveToPoint({0_tile, 2_tile});
-    // chassis->turnToPoint({1_tile, 1_tile});
-    chassis->driveToPoint({2_tile, 2_tile});
-    // chassis->turnToPoint({1_tile, 1_tile});
+      chassis->driveToPoint({1_tile, 1.5_tile});
+      shootToPoint(closeTargetPoint, 3);
 
-    chassis->driveToPoint({2_tile, 0_tile});
-    // chassis->turnToPoint({1_tile, 1_tile});
+      chassis->turnToAngle(40_deg);
+      chassis->waitUntilSettled();
+      pros::c::adi_digital_write(2, true);
+      chassis->turnToAngle(50_deg);
+      chassis->waitUntilSettled();
+      pros::c::adi_digital_write(4, true);
 
-    chassis->driveToPoint({0_tile, 0_tile});
-    // chassis->turnToPoint({1_tile, 1_tile});
+      break;
+    case 7:  // Testing auton
+      flywheel->setTarget(0);
+      odometry->setState({0_in, 0_in, 90_deg});
+      // chassis->driveToPointByPath({0_tile, 2_tile, 90_deg}, fastGen);
+      // chassis->waitUntilSettled();
+      // chassis->driveToPointByPath({2_tile, 2_tile, 0_deg}, fastGen, true);
+      // chassis->waitUntilSettled();
+      // chassis->driveToPointByPath({2_tile, 0_tile, -90_deg}, fastGen, true);
+      // chassis->waitUntilSettled();
+      // chassis->driveToPointByPath({0_tile, 0_tile, 180_deg}, fastGen, true);
+      // chassis->waitUntilSettled();
+      // chassis->drivePathFromHere({{0_tile, 1_tile, 90_deg},
+      //                             {1_tile, 2_tile, 0_deg},
+      //                             {2_tile, 1_tile, 270_deg},
+      //                             {1_tile, 0_tile, 180_deg},
+      //                             {0_tile, 0_tile, 180_deg}},
+      //                            fastGen);
+      // chassis->waitUntilSettled();
 
-  default: // Disabled or unkown index
-    break;
+      chassis->driveToPoint({0_tile, 2_tile}, 0.4);
+      chassis->driveToPoint({2_tile, 2_tile}, 0.4);
+      chassis->driveToPoint({2_tile, 0_tile}, 0.4);
+      chassis->driveToPoint({0_tile, 0_tile}, 0.4);
+
+    default:  // Disabled or unkown index
+      break;
   }
   flywheel->setTarget(0);
   intake->setManualMode(true);
@@ -366,8 +385,8 @@ void autonomous() {
 }
 
 void opcontrol() {
-  // #define tuning
-  // #define quiet
+// #define tuning
+#define quiet
 
   using std::literals::string_literals::operator""s;
   controller.clear();
@@ -377,12 +396,12 @@ void opcontrol() {
     pros::ADIDigitalOut cylinder(1, false);
     okapi::ControllerButton trigger(okapi::ControllerDigital::R2);
     int shotCount = 0;
-    while (!pros::Task::notify_take(true, 10)) {
+    while (pros::Task::notify_take(true, 10) == 0U) {
       if (trigger.isPressed() && flywheel->isSettled()) {
         controller.setText(1, 0, std::to_string(++shotCount));
-        cylinder.set_value(true);
+        cylinder.set_value(1);
         pros::delay(300);
-        cylinder.set_value(false);
+        cylinder.set_value(0);
       }
     }
   });
@@ -402,10 +421,10 @@ void opcontrol() {
       pros::c::task_get_current(), (pros::task_t)timer, 1,
       pros::notify_action_e_t::E_NOTIFY_ACTION_OWRITE);
 
-  controller.rumble("-"s); // Match start rumble
+  controller.rumble("-"s);  // Match start rumble
 
   // flywheel->setTarget(distanceCalcRPM(110_in));
-  flywheel->setTarget(0);
+  // flywheel->setTarget(0);
   intake->setLoopSkip(false);
   intake->setManualMode(false);
   intake->setEnabledMode(true);
@@ -442,11 +461,11 @@ void opcontrol() {
 #ifndef tuning
     if (controller[okapi::ControllerDigital::L1].changedToPressed() &&
         canExpand) {
-      rightCyl.set_value(true);
+      rightCyl.set_value(1);
     }
     if (controller[okapi::ControllerDigital::L2].changedToPressed() &&
         canExpand) {
-      leftCyl.set_value(true);
+      leftCyl.set_value(1);
     }
 
     if (up.changedToPressed()) {
@@ -465,8 +484,9 @@ void opcontrol() {
 
     display.setPosition(odometry->getState());
 
-    model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
-                  -controller.getAnalog(okapi::ControllerAnalog::rightX));
+    model->driveVector(controller.getAnalog(okapi::ControllerAnalog::leftY),
+                       controller.getAnalog(okapi::ControllerAnalog::rightX));
+
 #endif
 #ifdef tuning
     if (controller[okapi::ControllerDigital::X].changedToPressed())

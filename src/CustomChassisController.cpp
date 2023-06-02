@@ -158,8 +158,9 @@ void CustomChassisController::movementLoop() {
             break;
           }
 
-          auto distanceOutput =
-              distanceLimiter.filterIncrease(distancePID->getOutput());
+          auto distanceOutput = std::clamp(
+              distanceLimiter.filterIncrease(distancePID->getOutput()),
+              -maxSpeed, maxSpeed);
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
           // model->driveVector(distancePID->getOutput(), turnPID->getOutput());
           model->forward(distanceOutput);
@@ -227,10 +228,12 @@ void CustomChassisController::runPath(
 // May need to update driveDistance for poss. of changed theta since prev
 // movement
 
-void CustomChassisController::driveDistance(okapi::QLength distance) {
+void CustomChassisController::driveDistance(okapi::QLength distance,
+                                            double maxSpeed) {
   fmt::print("Sending moveDistance command\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
+  CustomChassisController::maxSpeed = maxSpeed;
   distancePID->reset();
   distancePID->setTarget(distance.convert(okapi::meter));
   std::cout << "Driving distance " << distance.convert(1_in) << "in\n";
@@ -307,9 +310,10 @@ void CustomChassisController::turnRaw(double speed,
 void CustomChassisController::driveToPoint(
     okapi::Point point,
     bool reverse,
-    okapi::QLength
-        distanceThreshold) {  // TODO: when angle is closer to the back, reverse
+    okapi::QLength distanceThreshold,
+    double maxSpeed) {  // TODO: when angle is closer to the back, reverse
   if (distanceToPoint(point, odom->getPoint()) < distanceThreshold) {
+    fmt::print("Distance threshold not met: no movement");
     return;
   }
 
@@ -319,8 +323,13 @@ void CustomChassisController::driveToPoint(
              distance.convert(1_in), point.x.convert(1_in),
              point.y.convert(1_in), odom->getPoint().x.convert(1_in),
              odom->getPoint().y.convert(1_in));
-  driveDistance(reverse ? -distance : distance);
+  driveDistance(reverse ? -distance : distance, maxSpeed);
   waitUntilSettled();
+}
+
+void CustomChassisController::driveToPoint(okapi::Point point,
+                                           double maxSpeed) {
+  driveToPoint(point, false, 0_in, maxSpeed);
 }
 
 void CustomChassisController::cancelMovement() {
