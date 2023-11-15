@@ -1,1 +1,1 @@
-Checks: 'clang-diagnostic-*,clang-analyzer-*,cppcoreguidelines-*,modernize-*,bugprone-*,performance-*,readability-*,-modernize-use-trailing-return-type,-readability-magic-numbers,-cppcoreguidelines-avoid-magic-numbers'
+Checks: 'clang-analyzer-*,cppcoreguidelines-*,hicpp-*,modernize-*,bugprone-*,performance-*,readability-*,-readability-identifier-length,-modernize-use-trailing-return-type,-readability-magic-numbers,-cppcoreguidelines-avoid-magic-numbers,-bugprone-easily-swappable-parameters'

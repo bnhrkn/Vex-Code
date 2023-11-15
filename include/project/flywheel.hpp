@@ -15,7 +15,7 @@ class Flywheel {
   void setTarget(double rpm);
   okapi::QAngularSpeed getTarget() const;
   bool isSettled() const;
-  void waitUntilSettled(const std::uint32_t pollingRate = 10) const;
+  void waitUntilSettled(std::uint32_t pollingRate = 10) const;
 
  private:
   void taskFunc();

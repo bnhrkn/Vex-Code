@@ -1,7 +1,6 @@
 #include "project/algorithms.hpp"
 #include <cmath>
 #include <numbers>
-#include "fmt/format.h"
 #include "geometry/pose.hpp"
 #include "main.h"
 using namespace okapi::literals;
@@ -21,8 +20,8 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
                       std::sin(-nowPose.yaw) * globalError.x +
                           std::cos(-nowPose.yaw) * globalError.y,
                       globalError.yaw};
-  fmt::print("Local error ({}, {}, {})", localError.x, localError.y,
-             localError.yaw);
+  std::cout << std::format("Local error ({}, {}, {})", localError.x,
+                           localError.y, localError.yaw);
   const auto rotationVel = goalPoint.curvature * goalPoint.vector.vel;
   const auto kgain = 2 * zeta *
                      std::sqrt(std::pow(rotationVel, 2) +

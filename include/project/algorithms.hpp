@@ -25,12 +25,12 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
                       double b,
                       double zeta);
 
-[[nodiscard]] auto stateToPose(const okapi::OdomState state) -> squiggles::Pose;
-[[nodiscard]] auto stateToPoint(const okapi::OdomState state) -> okapi::Point;
-[[nodiscard]] auto chassisToTankSpeeds(
-    const ChassisSpeeds speeds,
-    const okapi::ChassisScales scales,
-    const okapi::AbstractMotor::GearsetRatioPair) -> TankSpeeds;
+[[nodiscard]] auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
+[[nodiscard]] auto stateToPoint(okapi::OdomState state) -> okapi::Point;
+[[nodiscard]] auto chassisToTankSpeeds(ChassisSpeeds speeds,
+                                       okapi::ChassisScales scales,
+                                       okapi::AbstractMotor::GearsetRatioPair)
+    -> TankSpeeds;
 
 [[nodiscard]] auto rotateAroundOrigin(const okapi::OdomState& frame,
                                       const okapi::QAngle& angle)
@@ -88,10 +88,10 @@ class debouncer {
     }
   }
 
- protected:
+ private:
   bool stable = false;
-  const T changeThreshold;
-  const std::uint32_t timeThreshold;
+  T changeThreshold;
+  std::uint32_t timeThreshold;
   T process;
   T output;
   std::uint32_t time = 0;
@@ -101,7 +101,7 @@ template <typename T>
   requires std::three_way_comparable<T>
 class changeLimiter {
  public:
-  changeLimiter(T maxChangePerSec, T initValue = 0)
+  explicit changeLimiter(T maxChangePerSec, T initValue = 0)
       : maxChangePerSec(maxChangePerSec),
         prevValue(initValue),
         prevTime(pros::millis()){};
@@ -123,8 +123,8 @@ class changeLimiter {
   };
   // [[nodiscard]] T getOutput() const;
 
- protected:
-  const T maxChangePerSec;
+ private:
+  T maxChangePerSec;
   T prevValue = 0;
   std::uint32_t prevTime;
 };
@@ -137,12 +137,12 @@ auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
 class lowPassFilter : public okapi::Filter {
  public:
   lowPassFilter(double cutoffFreq, double deltaTime);
-  double filter(double value);
-  [[nodiscard]] double getOutput() const;
+  double filter(double value) override;
+  [[nodiscard]] double getOutput() const override;
 
- protected:
+ private:
   double output = 0;
-  const double ePow;
+  double ePow;
 };
 
 class DisconnectDetector {

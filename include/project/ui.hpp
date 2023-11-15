@@ -1,12 +1,12 @@
 #pragma once
 #include <fstream>
 #include <memory>
-#include "display/lv_core/lv_obj.h"
+#include "liblvgl/lvgl.h"
 #include "main.h"
 
 class ui {
  public:
-  ui(std::unique_ptr<lv_obj_t> ihomeScreen);
+  explicit ui(std::unique_ptr<lv_obj_t> ihomeScreen);
   ~ui();
   void setPosition(const okapi::OdomState& state);
   int getAuton();
@@ -27,9 +27,6 @@ class ui {
   lv_obj_t* colorRoller;
 
   lv_obj_t* settingTab;
-
-  lv_obj_t* logTab;
-  lv_obj_t* log;
 
   lv_obj_t* positionTab;
   lv_obj_t* positionLabel;

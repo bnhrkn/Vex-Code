@@ -1,7 +1,7 @@
 #include "project/CustomChassisController.hpp"
 #include <cmath>
+#include <format>
 #include <utility>
-#include "fmt/format.h"
 #include "okapi/api/odometry/odomMath.hpp"
 #include "project/algorithms.hpp"
 using namespace okapi::literals;
@@ -34,7 +34,7 @@ CustomChassisController::CustomChassisController(
 }
 
 CustomChassisController::~CustomChassisController() {
-  fmt::print("Destructor called\n");
+  std::cout << std::format("Destructor called\n");
   movementTask.notify();
   pros::c::task_abort_delay((pros::task_t)movementTask);
   odomTask.notify();
@@ -53,12 +53,12 @@ void CustomChassisController::movementLoop() {
     return valid;
   };
   pros::Task::current().suspend();  // Wait to be resumed for first command
-  fmt::print("Movement task awoke\n");
+  std::cout << std::format("Movement task awoke\n");
   while (taskValid()) {
     // End task when notified
     switch (mode.load()) {
       case MovementType::path: {
-        fmt::print("Entered path case\n");
+        std::cout << std::format("Entered path case\n");
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
         std::uint32_t timeDelta = (path[1].time - path[0].time) * 1000;
@@ -83,13 +83,13 @@ void CustomChassisController::movementLoop() {
           model->right(right.convert(600_rpm));
           pros::Task::delay_until(prev.get(), timeDelta);
         }
-        fmt::print("Done path\n");
+        std::cout << std::format("Done path\n");
         model->stop();
         break;
       }
 
       case MovementType::turn: {
-        fmt::print("Entered turning case\n");
+        std::cout << std::format("Entered turning case\n");
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
         // auto positiveModulo = [](double a, double b){
@@ -121,12 +121,12 @@ void CustomChassisController::movementLoop() {
           model->rotate(angleOutput);
           pros::Task::delay_until(prev.get(), 10);
         }
-        fmt::print("Done Turn\n");
+        std::cout << std::format("Done Turn\n");
         model->stop();
         break;
       }
       case MovementType::straight: {
-        fmt::print("Entered straight case\n");
+        std::cout << std::format("Entered straight case\n");
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
         auto initalPos = odom->getState();
@@ -164,15 +164,17 @@ void CustomChassisController::movementLoop() {
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
           // model->driveVector(distancePID->getOutput(), turnPID->getOutput());
           model->forward(distanceOutput);
+          std::cout << std::format("Ran Loop. Dist Error: {}, Angle Error {}\n",
+                                   x, angleInputValue);
           pros::Task::delay_until(prev.get(), 10);
         }
-        fmt::print("Done Straight\n");
+        std::cout << std::format("Done Straight\n");
         model->stop();
         break;
       }
 
       case MovementType::disabled:  // Do nothing
-        fmt::print("Warning: Entered disabled case");
+        std::cout << std::format("Warning: Entered disabled case");
         break;
     }
     pros::Task::current().suspend();  // Suspend and await next command
@@ -207,7 +209,7 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
             << "deg\n";
   mode.store(MovementType::turn);
   movementTask.resume();
-  fmt::print("done all the stuff\n");
+  std::cout << std::format("done all the stuff\n");
   // pros::delay(50);
 }
 
@@ -217,7 +219,7 @@ void CustomChassisController::turnByAngle(okapi::QAngle angle) {
 
 void CustomChassisController::runPath(
     std::vector<squiggles::ProfilePoint> ipath) {
-  fmt::print("Sending runpath command\n");
+  std::cout << std::format("Sending runpath command\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   path = std::move(ipath);
@@ -230,7 +232,7 @@ void CustomChassisController::runPath(
 
 void CustomChassisController::driveDistance(okapi::QLength distance,
                                             double maxSpeed) {
-  fmt::print("Sending moveDistance command\n");
+  std::cout << std::format("Sending moveDistance command\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   CustomChassisController::maxSpeed = maxSpeed;
@@ -271,8 +273,9 @@ void CustomChassisController::driveToPointByPath(
     okapi::OdomState destination,
     squiggles::SplineGenerator& generator,
     bool discreteTurn) {
-  fmt::print("Driving to state {} from {}\n", destination.str(1_tile, "_t"),
-             odom->getState().str(1_tile, "_t"));
+  std::cout << std::format("Driving to state {} from {}\n",
+                           destination.str(1_tile, "_t"),
+                           odom->getState().str(1_tile, "_t"));
   if (discreteTurn) {
     turnToPoint(stateToPoint(destination));
   }
@@ -313,16 +316,16 @@ void CustomChassisController::driveToPoint(
     okapi::QLength distanceThreshold,
     double maxSpeed) {  // TODO: when angle is closer to the back, reverse
   if (distanceToPoint(point, odom->getPoint()) < distanceThreshold) {
-    fmt::print("Distance threshold not met: no movement");
+    std::cout << std::format("Distance threshold not met: no movement");
     return;
   }
 
   turnToPoint(point, static_cast<int>(reverse) * 180_deg);
   auto distance = distanceToPoint(point, odom->getPoint());
-  fmt::print("Driving {}\" to point ({}\", {}\") from ({}\", {}\")\n",
-             distance.convert(1_in), point.x.convert(1_in),
-             point.y.convert(1_in), odom->getPoint().x.convert(1_in),
-             odom->getPoint().y.convert(1_in));
+  std::cout << std::format(
+      "Driving {}\" to point ({}\", {}\") from ({}\", {}\")\n",
+      distance.convert(1_in), point.x.convert(1_in), point.y.convert(1_in),
+      odom->getPoint().x.convert(1_in), odom->getPoint().y.convert(1_in));
   driveDistance(reverse ? -distance : distance, maxSpeed);
   waitUntilSettled();
 }
@@ -333,7 +336,7 @@ void CustomChassisController::driveToPoint(okapi::Point point,
 }
 
 void CustomChassisController::cancelMovement() {
-  fmt::print("Cancelling movement\n");
+  std::cout << std::format("Cancelling movement\n");
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   waitUntilSettled();
