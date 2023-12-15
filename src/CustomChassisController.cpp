@@ -79,8 +79,8 @@ void CustomChassisController::movementLoop() {
               chassisToTankSpeeds(speeds, chassisScales, driveRatio);
           // std::cout << "left: " << left.convert(1_rpm) << ", right: " <<
           // right.convert(1_rpm) << std::endl;
-          model->left(left.convert(600_rpm));
-          model->right(right.convert(600_rpm));
+          model->left(left.convert(200_rpm));
+          model->right(right.convert(200_rpm));
           pros::Task::delay_until(prev.get(), timeDelta);
         }
         std::cout << std::format("Done path\n");
@@ -98,27 +98,27 @@ void CustomChassisController::movementLoop() {
         while (taskValid() && mode.load() == MovementType::turn) {
           // printf("Running turn\n");
           //   Do math to figure out the right direction to turn
-          auto nowAngle =
-              okapi::OdomMath::constrainAngle360(odom->getState().theta);
-          auto error = okapi::OdomMath::constrainAngle180(
-              turnPID->getTarget() * 1_deg - nowAngle);
-          auto inputValue =
-              turnPID->getTarget() -
-              error.convert(1_deg);  // Fool the controller to use our error
-          turnPID->step(inputValue);
+          auto nowAngle = odom->getState().theta;
+          // okapi::OdomMath::constrainAngle360(odom->getState().theta);
+          // auto error =
+          //     turnPID->getTarget() * 1_deg - nowAngle;
+          // auto inputValue =
+          //     turnPID->getTarget() -
+          //     error.convert(1_deg);  // Fool the controller to use our error
+          turnPID->step(nowAngle.convert(1_deg));
 
           if (turnPID->isSettled()) {
             break;  // Must be after step or will instantly settle
           }
 
-          // std::cout << "Now Angle: " << nowAngle.convert(1_deg) << ", Error:
-          // "
-          // << error.convert(1_deg)
+          // std::cout << "Now Angle: "
+          //           << nowAngle.convert(1_deg)
+          //           // << ", Error:" << error.convert(1_deg)
           //           << ", Target: " << turnPID->getTarget()
           //           << ", Real Error: " << turnPID->getError() << std::endl;
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
 
-          model->rotate(angleOutput);
+          model->rotate(-angleOutput);
           pros::Task::delay_until(prev.get(), 10);
         }
         std::cout << std::format("Done Turn\n");
@@ -164,8 +164,10 @@ void CustomChassisController::movementLoop() {
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
           // model->driveVector(distancePID->getOutput(), turnPID->getOutput());
           model->forward(distanceOutput);
-          std::cout << std::format("Ran Loop. Dist Error: {}, Angle Error {}\n",
-                                   x, angleInputValue);
+          // std::cout << std::format(
+          //     "Ran Loop. Dist PID Input: {}, Angle PID Input {}\n",
+          //     nowRotatedPos.x.convert(1_in),
+          //     nowRotatedPos.theta.convert(1_deg));
           pros::Task::delay_until(prev.get(), 10);
         }
         std::cout << std::format("Done Straight\n");
@@ -203,10 +205,21 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   turnPID->reset();
-  turnPID->setTarget(okapi::OdomMath::constrainAngle360(angle).convert(1_deg));
+
+  double target = angle.convert(1_deg);
+  double theta = odom->getState().theta.convert(1_deg);
+  // Normalize target angle
+  target = fmod(target, 360.0);
+  if (target < 0) {
+    target += 360.0;
+  }
+  // Calculate and add the required number of full rotations
+  double rotationCount = round((theta - target) / 360.0);
+  double inputValue = target + rotationCount * 360.0;
+
+  turnPID->setTarget(inputValue);
   std::cout << "Turning to angle " << angle.convert(1_deg) << "deg by target "
-            << okapi::OdomMath::constrainAngle360(angle).convert(1_deg)
-            << "deg\n";
+            << inputValue << "deg\n";
   mode.store(MovementType::turn);
   movementTask.resume();
   std::cout << std::format("done all the stuff\n");
@@ -214,7 +227,17 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
 }
 
 void CustomChassisController::turnByAngle(okapi::QAngle angle) {
-  turnToAngle(odom->getState().theta + angle);
+  // turnToAngle(odom->getState().theta + angle);
+  mode.store(MovementType::disabled);
+  std::scoped_lock<pros::Mutex> lock(movementMutex);
+  turnPID->reset();
+  turnPID->setTarget((odom->getState().theta + angle).convert(1_deg));
+  std::cout << "Turning by angle " << angle.convert(1_deg) << "deg by target "
+            << (odom->getState().theta + angle).convert(1_deg) << "deg\n";
+
+  mode.store(MovementType::turn);
+  movementTask.resume();
+  std::cout << std::format("done all the stuff\n");
 }
 
 void CustomChassisController::runPath(

@@ -5,11 +5,12 @@
 #include "liblvgl/lvgl.h"
 #include "main.h"
 #include "okapi/api/odometry/odomState.hpp"
+#include "project/auton.hpp"
 constexpr int hres = 240, vres = 240;
 
-ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
+UI::UI(std::unique_ptr<lv_obj_t> ihomeScreen)
     : homeScreen(ihomeScreen.release()),
-      tabView(lv_tabview_create(homeScreen, LV_DIR_TOP, 20)),
+      tabView(lv_tabview_create(homeScreen, LV_DIR_TOP, 50)),
       graphTab(lv_tabview_add_tab(tabView, "Graph")),
       chart(lv_chart_create(graphTab)),
       series({lv_chart_add_series(chart,
@@ -26,17 +27,16 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
       positionLabel(lv_label_create(positionTab)) {
   // Try to enforce an ownership transfer
   // lv_theme_set_current(lv_theme_night_init(266, LV_FONT_MONTSERRAT_10));
-  lv_obj_set_size(autonRoller,
-                  lv_obj_get_width(autonTab) / static_cast<short>(2),
-                  lv_obj_get_height(autonTab));
-  lv_obj_align(autonRoller, LV_ALIGN_RIGHT_MID,
-               -lv_obj_get_width(autonRoller) / 2 + 5, 0);
-  lv_roller_set_options(autonRoller,
-                        "Disabled\nCross Field\nRight Full\nRight Roller\nLeft "
-                        "Roller\nLeft Full\nProg Skills\nTest\n",
+  // lv_obj_set_size(autonRoller,
+  //                 lv_obj_get_width(autonTab) / static_cast<short>(2),
+  //                 lv_obj_get_height(autonTab));
+  // lv_obj_align(autonRoller, LV_ALIGN_RIGHT_MID,
+  //              lv_obj_get_width(autonRoller) / 2 + 5, 0);
+  lv_roller_set_options(autonRoller, auton::autonNames.c_str(),
                         LV_ROLLER_MODE_INFINITE);
 
-  lv_roller_set_options(colorRoller, "Blue\nRed\n", LV_ROLLER_MODE_INFINITE);
+  // lv_roller_set_options(colorRoller, "Blue\nRed\n", LV_ROLLER_MODE_NORMAL);
+  lv_obj_add_flag(colorRoller, LV_OBJ_FLAG_HIDDEN);
 
   lv_chart_set_point_count(chart, 500);
   lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 600);
@@ -46,7 +46,7 @@ ui::ui(std::unique_ptr<lv_obj_t> ihomeScreen)
   lv_label_set_long_mode(positionLabel, LV_LABEL_LONG_CLIP);
   lv_obj_set_width(positionLabel, hres);
 };
-ui::~ui() {
+UI::~UI() {
   lv_obj_del(tabView);
 
   lv_obj_del(graphTab);
@@ -63,23 +63,23 @@ ui::~ui() {
   lv_obj_del(positionLabel);
 }
 
-void ui::setPosition(const okapi::OdomState& state) {
+void UI::setPosition(const okapi::OdomState& state) {
   using namespace okapi::literals;
   auto [x, y, yaw] = state;
   auto out = std::format("X: {}\"\nY: {}\"\nYaw: {}°", x.convert(1_in),
                          y.convert(1_in), yaw.convert(1_deg));
   lv_label_set_text(positionLabel, out.c_str());
 }
-int ui::getAuton() {
-  return lv_roller_get_selected(autonRoller);
+auton::AutonMode UI::getAuton() {
+  return static_cast<auton::AutonMode>(lv_roller_get_selected(autonRoller));
 }
-bool ui::isBlueTeam() {
+bool UI::isBlueTeam() {
   return !static_cast<bool>(lv_roller_get_selected(colorRoller));
 }
-void ui::graph(double value, size_t which) {
+void UI::graph(double value, size_t which) {
   try {
     lv_chart_set_next_value(chart, series.at(which), value);
-  } catch (std::out_of_range except) {
+  } catch (std::out_of_range& except) {
     std::cout << std::format("No ui chart series exists at index {}. Error: {}",
                              which, except.what());
   }

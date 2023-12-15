@@ -52,15 +52,23 @@ struct UnitlessPoint {
 
 void CustomOdom::step() {
   using namespace okapi::literals;
-  ScopeLock stateLock(stateMutex);
+  // ScopeLock stateLock(stateMutex);
 
   const auto reading =
       // Must update setState to match
       CustomOdom::SensorValues{
-          (left->get() + right->get()) / 2.0 / 100 * okapi::degree,
+          (left->get() + right->get()) / 2.0 * okapi::degree,
           imu->get_rotation() * -1 * okapi::degree};
 
+  // std::cout << std::format(
+  //     "Left: {}, Right: {}, X: {}, Angle: {}\n", left->get(), right->get(),
+  //     reading.x.convert(okapi::degree),
+  //     reading.angle.convert(okapi::degree));
+
   const auto readingChange = reading - prevReading;
+  // std::cout << std::format("DX: {}, DTheta: {}\n",
+  //                          readingChange.x.convert(1_deg),
+  //                          readingChange.angle.convert(1_deg));
   const auto prevThetaRad = prevReading.angle.convert(1_rad);
   const auto dThetaRad = readingChange.angle.convert(okapi::radian);
 
@@ -142,17 +150,21 @@ void CustomOdom::step() {
   prevReading = reading;
 }
 okapi::OdomState CustomOdom::getState() const {
-  ScopeLock lock(stateMutex);
+  // ScopeLock lock(stateMutex);
   return state;
 };
 okapi::Point CustomOdom::getPoint() const {
   const auto state = getState();
+  std::cout << std::format("Sending Point ({},{}) to getPoint caller\n",
+                           state.x.convert(1_in), state.y.convert(1_in));
   return {state.x, state.y};
 }
 void CustomOdom::setState(const okapi::OdomState& istate) {
-  ScopeLock lock(stateMutex);
+  // copeLock lock(stateMutex);
   state = istate;
   imu->set_rotation(-state.theta.convert(1_deg));
+  left->reset();  // Very important?
+  right->reset();
   prevReading = CustomOdom::SensorValues{
       (left->get() + right->get()) / 2.0 / 100 * okapi::degree,
       imu->get_rotation() * -1 * okapi::degree};

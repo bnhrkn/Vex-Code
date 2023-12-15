@@ -8,8 +8,8 @@ class CustomOdom {
              std::shared_ptr<pros::IMU> imu,
              okapi::ChassisScales odomScales);
   void step();
-  okapi::OdomState getState() const;
-  okapi::Point getPoint() const;
+  [[nodiscard]] okapi::OdomState getState() const;
+  [[nodiscard]] okapi::Point getPoint() const;
   void setState(const okapi::OdomState& istate);
 
  private:

@@ -5,32 +5,22 @@
 #include "project/PIDF.hpp"
 
 class Catapult {
- private:
-  enum class CATAPULT_STATE {
-    armed = 2,
-    shooting = 3,
-    idle = 0,
-    loading = 1,
-    jam = 4,
-    unknown = 5,
-  };
-
  public:
-  Catapult(std::vector<std::int8_t> motorPorts,
-           pros::Rotation rotation,
-           pidf gains);
+  Catapult(pros::Motor motor, pros::Rotation rotation);
   ~Catapult();
-  bool fire();
+  void fire();
+  void arm();
   bool isArmed();
-  void setGains(pidf gains);
-  pidf getGains();
-  Catapult::CATAPULT_STATE getState();
+  bool isReady();
 
  private:
-  pidfAlgorithm controller;
-  pros::MotorGroup motors;
-  pros::Rotation rotation;
-  pros::Task motorTask;
-  void motorLoop();
-  std::atomic<CATAPULT_STATE> state = CATAPULT_STATE::idle;
+  pros::Motor motor;
+  pros::Rotation sensor;
+  pros::Task internalTask;
+  void taskFunction();
+  okapi::QAngle getAngle();
+  std::atomic_bool shouldArm = false;
+  std::atomic_bool shouldFire = false;
+  std::atomic_bool armed = false;
+  std::atomic_bool ready = false;
 };

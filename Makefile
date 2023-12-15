@@ -14,7 +14,7 @@ INCDIR=$(ROOT)/include
 
 WARNFLAGS+= -Wextra -Wall -Wno-implicit-fallthrough #-fanalyzer
 EXTRA_CFLAGS=
-EXTRA_CXXFLAGS= -O3
+EXTRA_CXXFLAGS= -Os
 
 # Set to 1 to enable hot/cold linking
 USE_PACKAGE:=1

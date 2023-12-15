@@ -143,3 +143,11 @@ double sinc(double radians) {
   }
   return sin(radians) / radians;
 }
+
+template <typename T>
+  requires std::is_signed_v<T> && requires(T a, T b) {
+    { a < b } -> std::convertible_to<bool>;
+  }
+T abs(T value) {
+  return (value < 0) ? -value : value;
+}

@@ -3,15 +3,18 @@
 #include <memory>
 #include "liblvgl/lvgl.h"
 #include "main.h"
+#include "project/auton.hpp"
 
-class ui {
+class UI {
  public:
-  explicit ui(std::unique_ptr<lv_obj_t> ihomeScreen);
-  ~ui();
+  explicit UI(std::unique_ptr<lv_obj_t> ihomeScreen);
+  ~UI();
   void setPosition(const okapi::OdomState& state);
-  int getAuton();
+  auton::AutonMode getAuton();
+  void setAutonList(const std::vector<std::string>& autonList);
   bool isBlueTeam();
   void graph(double value, size_t which);
+  okapi::IterativePosPIDController::Gains getPIDGains();
 
  private:
   lv_obj_t* homeScreen;
