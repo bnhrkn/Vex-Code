@@ -1,5 +1,7 @@
+// #define EIGEN_DONT_VECTORIZE
 #include "main.h"
 #include <memory>
+#include "Eigen/Core"
 #include "project/CustomChassisController.hpp"
 #include "project/algorithms.hpp"
 #include "project/catapult.hpp"
