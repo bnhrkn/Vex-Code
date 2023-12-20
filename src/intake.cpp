@@ -1,5 +1,6 @@
 #include <utility>
 
+#include <algorithm>
 #include "project/algorithms.hpp"
 #include "project/intake.hpp"
 
@@ -34,13 +35,23 @@ void Intake::taskFunction() {
     }
     auto forwardVel = model->getLeftSideMotor()->getActualVelocity() +
                       model->getRightSideMotor()->getActualVelocity() / 2.0;
-    std::cout << forwardVel << "\n";
+    auto turnSpeed = std::abs(model->getLeftSideMotor()->getActualVelocity() -
+                              model->getRightSideMotor()->getActualVelocity()) /
+                     2.0;
+    auto turnSpeedThreshold = 40;
     if (!cata->isReady()) {
       motor.move_voltage(0);
     } else if ((seeBall() && !hasBall()) || (hasBall() && cata->isArmed())) {
       motor.move_voltage(12000);
-    } else if (forwardVel < 0 && (hasBall() || seeBall())) {
-      motor.move_voltage(7500.0 * -forwardVel / 200.0);
+    } else if ((forwardVel < 0 || turnSpeed > turnSpeedThreshold) &&
+               (hasBall() || seeBall())) {
+      constexpr double maxAdjustedVoltage = 7500;
+      constexpr double wheelRPM = 200;
+      auto reverseAdjustedVoltage = std::clamp(
+          maxAdjustedVoltage * -forwardVel / wheelRPM, 0.0, maxAdjustedVoltage);
+      auto turnAdjustedVoltage = std::clamp(
+          maxAdjustedVoltage * turnSpeed / wheelRPM, 0.0, maxAdjustedVoltage);
+      motor.move_voltage(std::max(reverseAdjustedVoltage, turnAdjustedVoltage));
     } else {
       motor.move_voltage(0);
     }

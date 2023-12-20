@@ -97,7 +97,6 @@ void autonomous() {
       std::cout << "Running Close Quals\n";
       odometry->setState({24_in - 5_in, 24_in - 5_in, 45_deg});
       intake->release();
-      catapult->arm();
       pros::delay(300);
       //  odometry->setState({24_in - 5_in, 24_in - 5_in, 45_deg});
       // chassis->driveDistance(24_in);
@@ -133,12 +132,46 @@ void autonomous() {
       break;
     case AutonMode::close_finals:
       std::cout << "Running Near Finals\n";
+      odometry->setState({24_in - 5_in, 24_in - 5_in, 45_deg});
+      intake->release();
+      pros::delay(300);
+
+      chassis->driveToPoint({1.85_ft, 1.85_ft});
+
+      chassis->driveToPoint({0.7_ft, 2.75_ft}, true);
+      chassis->driveToPoint({0.7_ft, 3.125_ft}, true);
+      chassis->driveToPoint({0.7_ft, 2.88_ft}, false);
+      chassis->driveToPoint({3_ft, 1_ft}, true);
+      chassis->driveToPoint({4.25_ft, 1_ft}, true);
+      // chassis->driveToPoint({5.5_ft, 30_in});
 
       // Tries to score as many points as possible
       break;
     case AutonMode::far_finals:
       std::cout << "Running Far Finals\n";
+      odometry->setState({17_in, 36_in, 0_deg});
+      // pros::delay(100);
+      intake->release();
+      chassis->driveToPoint({5.25_ft, 3_ft}, false, 1_in);
+      chassis->driveToPoint({5.25_ft, 2.3_ft});
+      chassis->driveToPoint({5.25_ft, 3_ft}, true);
+      // chassis->turnToAngle(-90_deg);
+      // chassis->waitUntilSettled();
+      // chassis->driveDistance(7_in);
+      // chassis->waitUntilSettled();
+      // chassis->driveDistance(-7_in);
+      // chassis->waitUntilSettled();
 
+      chassis->driveToPoint({5.75_ft, 3.75_ft});
+      chassis->driveToPoint({5.25_ft, 2.3_ft});
+      chassis->driveToPoint({5.25_ft, 3_ft}, true);
+
+      chassis->driveToPoint({4_ft, 5_ft});
+      chassis->driveToPoint({5.25_ft, 2.3_ft});
+      chassis->driveToPoint({5.25_ft, 3_ft}, true);
+
+      // chassis->driveToPoint({3_ft, 3_ft});
+      // chassis->driveToPoint({3_ft, 5.5_ft});
       // Tries to score as many points as possible
       break;
   }

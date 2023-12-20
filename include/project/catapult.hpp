@@ -3,6 +3,7 @@
 
 #include "main.h"
 #include "project/PIDF.hpp"
+#include "project/algorithms.hpp"
 
 class Catapult {
  public:
@@ -17,6 +18,7 @@ class Catapult {
   pros::Motor motor;
   pros::Rotation sensor;
   pros::Task internalTask;
+  debouncer<double> debounce{0, 100, 100};
   void taskFunction();
   okapi::QAngle getAngle();
   std::atomic_bool shouldArm = false;
