@@ -1,4 +1,4 @@
-// #define EIGEN_DONT_VECTORIZE
+#define EIGEN_DONT_VECTORIZE
 #include "main.h"
 #include <memory>
 #include "Eigen/Core"
