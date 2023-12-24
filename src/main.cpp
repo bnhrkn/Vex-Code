@@ -40,16 +40,16 @@ void initialize() {
       okapi::AbstractMotor::gearset::green, 1};
 
   auto left = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{13, -14, -12});
+      std::initializer_list<okapi::Motor>{4, 5, 6});
   auto right = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{16, -17, 18});
+      std::initializer_list<okapi::Motor>{-1, -2, -3});
   model = std::make_shared<okapi::SkidSteerModel>(
       left, right, left->getEncoder(), right->getEncoder(), 200, 12000);
   model->setEncoderUnits(okapi::AbstractMotor::encoderUnits::degrees);
   model->setGearing(okapi::AbstractMotor::gearset::green);
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
 
-  imu = std::make_shared<pros::IMU>(1);
+  imu = std::make_shared<pros::IMU>(7);
   imu->reset(true);
 
   odometry = std::make_shared<CustomOdom>(left->getEncoder(),
@@ -71,9 +71,9 @@ void initialize() {
   chassis = std::make_shared<CustomChassisController>(
       model, turnPID, distancePID, odometry, scales, gearing);
 
-  catapult = std::make_shared<Catapult>(pros::Motor(-7), pros::Rotation(20));
-  intake = std::make_shared<Intake>(pros::Motor(2), catapult, model,
-                                    pros::Optical(15), pros::Optical(6));
+  catapult = std::make_shared<Catapult>(pros::Motor(8), pros::Rotation(9));
+  intake = std::make_shared<Intake>(pros::Motor(10), catapult, model,
+                                    pros::Optical(11), pros::Optical(12));
 }
 
 void disabled() {  // Does NOT run when you plug in
