@@ -4,23 +4,16 @@
 #include "project/algorithms.hpp"
 #include "project/intake.hpp"
 
-constexpr std::array<double, 3> possibleHues = {80, 15, 132};
-constexpr double ballHueTolerance = 15;
-
 Intake::Intake(pros::Motor motor,
-               std::shared_ptr<Catapult> cata,
-               std::shared_ptr<okapi::SkidSteerModel> model,
-               pros::Optical outerSensor,
-               pros::Optical innerSensor)
+               // std::shared_ptr<Catapult> cata,
+               // std::shared_ptr<okapi::SkidSteerModel> model,
+               pros::Optical sensor)
     : motor(std::move(motor)),
-      outerSensor(outerSensor),
-      innerSensor(innerSensor),
-      internalTask([this]() { taskFunction(); }),
-      cata(std::move(cata)),
-      model(std::move(model)) {
-  outerSensor.set_led_pwm(255);
-  innerSensor.set_led_pwm(255);
+      sensor(sensor),
+      internalTask([this]() { taskFunction(); }) {
+  sensor.set_led_pwm(255);
   motor.set_gearing(pros::E_MOTOR_GEAR_BLUE);
+  motor.set_brake_mode(pros::MotorBrake::hold);
 }
 Intake::~Intake() {
   internalTask.remove();
@@ -28,32 +21,23 @@ Intake::~Intake() {
 }
 
 void Intake::taskFunction() {
-  while (pros::Task::notify_take(true, 10) == 0U) {
+  int ballHeldTime = 0;
+  constexpr int extraRunTime = 150;
+  while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
       std::cout << "Manual mode\n";
       continue;
     }
-    auto forwardVel = model->getLeftSideMotor()->getActualVelocity() +
-                      model->getRightSideMotor()->getActualVelocity() / 2.0;
-    auto turnSpeed = std::abs(model->getLeftSideMotor()->getActualVelocity() -
-                              model->getRightSideMotor()->getActualVelocity()) /
-                     2.0;
-    auto turnSpeedThreshold = 40;
-    if (!cata->isReady()) {
-      motor.move_voltage(0);
-    } else if ((seeBall() && !hasBall()) || (hasBall() && cata->isArmed())) {
-      motor.move_voltage(12000);
-    } else if ((forwardVel < 0 || turnSpeed > turnSpeedThreshold) &&
-               (hasBall() || seeBall())) {
-      constexpr double maxAdjustedVoltage = 7500;
-      constexpr double wheelRPM = 200;
-      auto reverseAdjustedVoltage = std::clamp(
-          maxAdjustedVoltage * -forwardVel / wheelRPM, 0.0, maxAdjustedVoltage);
-      auto turnAdjustedVoltage = std::clamp(
-          maxAdjustedVoltage * turnSpeed / wheelRPM, 0.0, maxAdjustedVoltage);
-      motor.move_voltage(std::max(reverseAdjustedVoltage, turnAdjustedVoltage));
+    if (hasBall()) {
+      ballHeldTime += 10;
     } else {
-      motor.move_voltage(0);
+      ballHeldTime = 0;
+    }
+
+    if (seeBall() && (!hasBall() || ballHeldTime < extraRunTime)) {
+      motor.move_voltage(12000);
+    } else {
+      motor.move_velocity(0);
     }
     pros::delay(10);
   }
@@ -87,25 +71,14 @@ void Intake::waitUntilSettled(uint32_t timeoutMillis) {
 }
 
 bool Intake::seeBall() {
-  auto hue = outerSensor.get_hue();
-  // std::cout << outerSensor.get_proximity() << "," << outerSensor.get_hue()
-  //           << "\n";
-  if (outerSensor.get_proximity() == 0) {
+  auto hue = sensor.get_hue();
+  std::cout << sensor.get_proximity() << "," << sensor.get_hue() << "\n";
+  if (sensor.get_proximity() == 0) {
     return false;
   }
-  // std::cout << "Outer Prox: " << outerOptic.getProximity() << "\n";
-  return std::ranges::any_of(possibleHues, [&](double possibleHue) -> bool {
-    // std::cout << std::abs(hue - possibleHue) << "\n";
-    return std::abs(hue - possibleHue) < ballHueTolerance;
-  });
+  return hue > 55.0 && hue < 90.0;
 }
 bool Intake::hasBall() {
-  auto hue = innerSensor.get_hue();
-  if (innerSensor.get_proximity() == 0) {
-    return false;
-  }
-  // std::cout << "Inner Prox: " << innerOptic.getProximity() << "\n";
-  return std::ranges::any_of(possibleHues, [&](double possibleHue) -> bool {
-    return std::abs(hue - possibleHue) < ballHueTolerance;
-  });
+  constexpr auto holdingProxThreshold = 200;
+  return seeBall() && sensor.get_proximity() > holdingProxThreshold;
 }

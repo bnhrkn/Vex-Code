@@ -72,8 +72,7 @@ void initialize() {
       model, turnPID, distancePID, odometry, scales, gearing);
 
   catapult = std::make_shared<Catapult>(pros::Motor(8), pros::Rotation(9));
-  intake = std::make_shared<Intake>(pros::Motor(10), catapult, model,
-                                    pros::Optical(11), pros::Optical(12));
+  intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11));
 }
 
 void disabled() {  // Does NOT run when you plug in
