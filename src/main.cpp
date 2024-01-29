@@ -35,14 +35,14 @@ void initialize() {
   const okapi::IterativePosPIDController::Gains turnGains = {0.009, 0, 1e-06};
   const okapi::IterativePosPIDController::Gains distanceGains = {4.5, 0, 0};
   const okapi::ChassisScales scales = {
-      {4.125_in, 12.375_in}, 360};  // TPR MUST BE 360 WHEN USING DEGREES
+      {2.75_in, 10.37_in}, 360};  // TPR MUST BE 360 WHEN USING DEGREES
   const okapi::AbstractMotor::GearsetRatioPair gearing = {
-      okapi::AbstractMotor::gearset::green, 1};
+      okapi::AbstractMotor::gearset::blue, 48.0 / 36};
 
   auto left = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{4, 5, 6});
+      std::initializer_list<okapi::Motor>{-4, -5, -6});
   auto right = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{-1, -2, -3});
+      std::initializer_list<okapi::Motor>{1, 2, 3});
   model = std::make_shared<okapi::SkidSteerModel>(
       left, right, left->getEncoder(), right->getEncoder(), 200, 12000);
   model->setEncoderUnits(okapi::AbstractMotor::encoderUnits::degrees);
