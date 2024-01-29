@@ -163,6 +163,7 @@ void opcontrol() {
   okapi::ControllerButton armCata{okapi::ControllerDigital::R1};
   okapi::ControllerButton shootcata{okapi::ControllerDigital::R2};
   okapi::ControllerButton reverseIntake{okapi::ControllerDigital::L2};
+  okapi::ControllerButton intakeBtn{okapi::ControllerDigital::R2};
   okapi::ControllerButton autoFire(okapi::ControllerDigital::A);
   bool autofiring = false;
 
@@ -204,6 +205,8 @@ void opcontrol() {
     }
     if (reverseIntake.isPressed()) {
       intake->setManualMode(true, -12000);
+    } else if (intakeBtn.isPressed()) {
+      intake->setManualMode(true, 12000);
     } else {
       intake->setManualMode(false);
     }
