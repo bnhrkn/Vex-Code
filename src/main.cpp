@@ -2,6 +2,8 @@
 #include "main.h"
 #include <memory>
 #include "Eigen/Core"
+// #include "gsl/gsl-lite.hpp"
+#include "mp-units/core.h"
 #include "project/CustomChassisController.hpp"
 #include "project/algorithms.hpp"
 #include "project/catapult.hpp"
@@ -11,6 +13,7 @@
 #include "project/wings.hpp"
 
 using namespace okapi::literals;
+using namespace mp_units;
 std::shared_ptr<CustomChassisController> chassis;
 std::shared_ptr<okapi::SkidSteerModel> model;
 std::shared_ptr<CustomOdom> odometry;
