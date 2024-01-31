@@ -8,6 +8,7 @@
 #include "project/intake.hpp"
 #include "project/pidTuner.hpp"
 #include "project/ui.hpp"
+#include "project/wings.hpp"
 
 using namespace okapi::literals;
 std::shared_ptr<CustomChassisController> chassis;
@@ -19,6 +20,7 @@ std::shared_ptr<Catapult> catapult;
 std::shared_ptr<Intake> intake;
 std::shared_ptr<okapi::IterativePosPIDController> distancePID;
 std::shared_ptr<okapi::IterativePosPIDController> turnPID;
+std::shared_ptr<Wings> wings;
 
 void on_center_button() {}
 
@@ -73,6 +75,8 @@ void initialize() {
 
   catapult = std::make_shared<Catapult>(pros::Motor(8), pros::Rotation(9));
   intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11));
+  wings = std::make_shared<Wings>(pros::adi::DigitalOut(1),
+                                  pros::adi::DigitalOut(2));
 }
 
 void disabled() {  // Does NOT run when you plug in
@@ -165,6 +169,8 @@ void opcontrol() {
   okapi::ControllerButton reverseIntake{okapi::ControllerDigital::L2};
   okapi::ControllerButton intakeBtn{okapi::ControllerDigital::R2};
   okapi::ControllerButton autoFire(okapi::ControllerDigital::A);
+  okapi::ControllerButton leftWing(okapi::ControllerDigital::L1);
+  okapi::ControllerButton rightWing(okapi::ControllerDigital::R1);
   bool autofiring = false;
 
 #ifdef tuning
@@ -209,6 +215,13 @@ void opcontrol() {
       intake->setManualMode(true, 12000);
     } else {
       intake->setManualMode(false);
+    }
+
+    if (leftWing.changedToPressed()) {
+      wings->toggleExtended(Wings::Wing::left);
+    }
+    if (rightWing.changedToPressed()) {
+      wings->toggleExtended(Wings::Wing::right);
     }
 #endif
 #ifdef tuning
