@@ -26,6 +26,7 @@ void Intake::taskFunction() {
   while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
       std::cout << "Manual mode\n";
+      pros::delay(10);
       continue;
     }
     if (hasBall()) {
@@ -72,7 +73,7 @@ void Intake::waitUntilSettled(uint32_t timeoutMillis) {
 
 bool Intake::seeBall() {
   auto hue = sensor.get_hue();
-  std::cout << sensor.get_proximity() << "," << sensor.get_hue() << "\n";
+  // std::cout << sensor.get_proximity() << "," << sensor.get_hue() << "\n";
   if (sensor.get_proximity() == 0) {
     return false;
   }

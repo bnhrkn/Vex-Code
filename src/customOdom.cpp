@@ -72,7 +72,9 @@ void CustomOdom::step() {
   const auto prevThetaRad = prevReading.angle.convert(1_rad);
   const auto dThetaRad = readingChange.angle.convert(okapi::radian);
 
-  const auto arcLengthM = (readingChange.x.convert(1_deg) / scales.straight);
+  constexpr auto degreesPerInch =  // Drivetrain specific constant
+      360_deg * (48.0 / 36) / (2.75_in * std::numbers::pi);
+  const auto arcLengthM = (readingChange.x / degreesPerInch).convert(1_m);
 
   // Where we were
   const UnitlessPoint prevPoint = {state.x.convert(1_m), state.y.convert(1_m)};
@@ -155,8 +157,8 @@ okapi::OdomState CustomOdom::getState() const {
 };
 okapi::Point CustomOdom::getPoint() const {
   const auto state = getState();
-  std::cout << std::format("Sending Point ({},{}) to getPoint caller\n",
-                           state.x.convert(1_in), state.y.convert(1_in));
+  // std::cout << std::format("Sending Point ({},{}) to getPoint caller\n",
+  //                          state.x.convert(1_in), state.y.convert(1_in));
   return {state.x, state.y};
 }
 void CustomOdom::setState(const okapi::OdomState& istate) {

@@ -37,21 +37,23 @@ void initialize() {
   lvgl_init();
   ui = std::make_shared<UI>(std::unique_ptr<lv_obj_t>(lv_scr_act()));
 
-  const okapi::IterativePosPIDController::Gains turnGains = {0.009, 0, 1e-06};
-  const okapi::IterativePosPIDController::Gains distanceGains = {4.5, 0, 0};
+  const okapi::IterativePosPIDController::Gains turnGains = {0.0055, 0, 1e-06};
+  const okapi::IterativePosPIDController::Gains distanceGains = {2.1, 0, 0};
   const okapi::ChassisScales scales = {
-      {2.75_in, 10.37_in}, 360};  // TPR MUST BE 360 WHEN USING DEGREES
+      // Degrees per inch is defined in the class!!
+      {2.75_in, 10.37_in},
+      360};  // TPR MUST BE 360 WHEN USING DEGREES
   const okapi::AbstractMotor::GearsetRatioPair gearing = {
       okapi::AbstractMotor::gearset::blue, 48.0 / 36};
 
   auto left = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{-4, -5, -6});
+      std::initializer_list<okapi::Motor>{-1, -2, -3});
   auto right = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{1, 2, 3});
+      std::initializer_list<okapi::Motor>{4, 5, 6});
   model = std::make_shared<okapi::SkidSteerModel>(
-      left, right, left->getEncoder(), right->getEncoder(), 200, 12000);
+      left, right, left->getEncoder(), right->getEncoder(), 600, 12000);
   model->setEncoderUnits(okapi::AbstractMotor::encoderUnits::degrees);
-  model->setGearing(okapi::AbstractMotor::gearset::green);
+  model->setGearing(okapi::AbstractMotor::gearset::blue);
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
 
   imu = std::make_shared<pros::IMU>(7);
@@ -76,10 +78,16 @@ void initialize() {
   chassis = std::make_shared<CustomChassisController>(
       model, turnPID, distancePID, odometry, scales, gearing);
 
-  catapult = std::make_shared<Catapult>(pros::Motor(8), pros::Rotation(9));
+  catapult = std::make_shared<Catapult>(pros::Motor(-12), pros::Rotation(9));
   intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11));
   wings = std::make_shared<Wings>(pros::adi::DigitalOut(1),
                                   pros::adi::DigitalOut(2));
+  pros::Task([&]() {
+    while (true) {
+      ui->setPosition(odometry->getState());
+      pros::delay(10);
+    }
+  });
 }
 
 void disabled() {  // Does NOT run when you plug in
@@ -97,8 +105,8 @@ void autonomous() {
   switch (ui->getAuton()) {
     case AutonMode::disabled:
       std::cout << "Auton is disabled\n";
-      chassis->turnByAngle(720_deg);
-      // Don't do anything
+      chassis->moveRaw(-0.5, 500);
+      //  Don't do anything
       break;
 
     case AutonMode::close_quals:
@@ -161,6 +169,38 @@ void autonomous() {
       chassis->driveToPoint({5.25_ft, 3_ft}, true);
 
       break;
+    case AutonMode::prog_skills:
+      std::cout << "Running Prog Skills\n";
+      odometry->setState({-3_ft - 5_in, -5_ft + 5.5_in, 0_deg});
+      chassis->driveToPoint({-5_ft, -3_ft - 5_in}, true);
+      chassis->turnToPoint({4_ft, -1_ft});
+      // odometry->setState({-5_ft, -3_ft, 0_deg});
+      wings->toggleExtended(Wings::Wing::right);
+      int startTime = pros::millis();
+      while (pros::millis() - startTime < 35'000) {
+        catapult->fire();
+        pros::delay(10);
+      }
+      wings->toggleExtended(Wings::Wing::right);
+      chassis->turnByAngle(-10_deg);
+      chassis->waitUntilSettled();
+      chassis->moveRaw(-0.5, 750);
+      odometry->setState({-5_ft - 3.5_in, -3_ft - 5_in, 0_deg});
+      chassis->driveDistance(6_in);
+      chassis->waitUntilSettled();
+      chassis->driveToPoint({-3_ft, -5_ft + 2.5_in});
+      chassis->driveToPoint({3_ft, -5_ft});
+      chassis->driveToPoint({3_ft, -3_ft}, true);
+      chassis->driveToPoint({1_ft, -3_ft}, true);
+      chassis->driveToPoint({1_ft, 0_ft}, true);
+      chassis->turnToPoint({-4_ft, 0_ft});
+      wings->toggleExtended(Wings::Wing::left);
+      wings->toggleExtended(Wings::Wing::right);
+      pros::delay(250);
+      chassis->driveDistance(-3.6_ft);
+      chassis->driveDistance(2_ft);
+
+      break;
   }
 }
 
@@ -179,11 +219,11 @@ void opcontrol() {
 #ifdef tuning
   constexpr auto size = 3;
   auto getter = [=]() -> std::array<double, size> {
-    auto [P, I, D, B] = distancePID->getGains();
+    auto [P, I, D, B] = turnPID->getGains();
     return std::array{P, I, D};
   };
   auto setter = [=](std::array<double, 3> gains) -> void {
-    distancePID->setGains({gains[0], gains[1], gains[2]});
+    turnPID->setGains({gains[0], gains[1], gains[2]});
     std::cout << "P" << std::setprecision(6) << gains[0] << "\nI"
               << std::setprecision(6) << gains[1] << "\nD"
               << std::setprecision(6) << gains[2] << "\n";
@@ -196,8 +236,6 @@ void opcontrol() {
 
   while (true) {
 #ifndef tuning
-    auto state = odometry->getState();
-    ui->setPosition(state);
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   controller.getAnalog(okapi::ControllerAnalog::rightX));
     if (armCata.changedToPressed()) {
@@ -244,9 +282,9 @@ void opcontrol() {
       pidTuner.nextGain();
     }
     if (controller[okapi::ControllerDigital::L1].changedToPressed()) {
-      chassis->driveDistance(24_in * direction);
+      // chassis->driveDistance(24_in * direction);
       auto startTime = pros::millis();
-      // chassis->turnByAngle(90_deg);
+      chassis->turnByAngle(90_deg);
       direction *= -1;
       while (!chassis->isSettled() &&
              !controller[okapi::ControllerDigital::L2].changedToPressed()) {

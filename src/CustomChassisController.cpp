@@ -55,6 +55,10 @@ void CustomChassisController::movementLoop() {
   pros::Task::current().suspend();  // Wait to be resumed for first command
   std::cout << std::format("Movement task awoke\n");
   while (taskValid()) {
+    // std::cout << std::format("State: x: {}, y: {}, theta: {}\n",
+    //                          odom->getState().x.convert(1_in),
+    //                          odom->getState().y.convert(1_in),
+    //                          odom->getState().theta.convert(1_deg));
     // End task when notified
     switch (mode.load()) {
       case MovementType::path: {
@@ -92,30 +96,19 @@ void CustomChassisController::movementLoop() {
         std::cout << std::format("Entered turning case\n");
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
-        // auto positiveModulo = [](double a, double b){
-        //   return fmod(fmod())
-        // }
         while (taskValid() && mode.load() == MovementType::turn) {
-          // printf("Running turn\n");
-          //   Do math to figure out the right direction to turn
           auto nowAngle = odom->getState().theta;
-          // okapi::OdomMath::constrainAngle360(odom->getState().theta);
-          // auto error =
-          //     turnPID->getTarget() * 1_deg - nowAngle;
-          // auto inputValue =
-          //     turnPID->getTarget() -
-          //     error.convert(1_deg);  // Fool the controller to use our error
           turnPID->step(nowAngle.convert(1_deg));
 
           if (turnPID->isSettled()) {
             break;  // Must be after step or will instantly settle
           }
 
-          // std::cout << "Now Angle: "
-          //           << nowAngle.convert(1_deg)
-          //           // << ", Error:" << error.convert(1_deg)
-          //           << ", Target: " << turnPID->getTarget()
-          //           << ", Real Error: " << turnPID->getError() << std::endl;
+          std::cout << "Now Angle: "
+                    << nowAngle.convert(1_deg)
+                    // << ", Error:" << error.convert(1_deg)
+                    << ", Target: " << turnPID->getTarget()
+                    << ", Real Error: " << turnPID->getError() << std::endl;
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
 
           model->rotate(-angleOutput);
@@ -153,7 +146,6 @@ void CustomChassisController::movementLoop() {
               angleError.convert(
                   1_deg);  // Fool the controller to use our error
           turnPID->step(angleInputValue);
-
           if (distancePID->isSettled()) {
             break;
           }
