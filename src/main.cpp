@@ -56,7 +56,7 @@ void initialize() {
   model->setGearing(okapi::AbstractMotor::gearset::blue);
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
 
-  imu = std::make_shared<pros::IMU>(7);
+  imu = std::make_shared<pros::IMU>(18);
   imu->reset(true);
 
   odometry = std::make_shared<CustomOdom>(left->getEncoder(),
@@ -78,8 +78,10 @@ void initialize() {
   chassis = std::make_shared<CustomChassisController>(
       model, turnPID, distancePID, odometry, scales, gearing);
 
-  catapult = std::make_shared<Catapult>(pros::Motor(-12), pros::Rotation(9));
-  intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11));
+  catapult = std::make_shared<Catapult>(pros::Motor(-12), pros::Rotation(16),
+                                        pros::Distance(14));
+  intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11),
+                                    pros::adi::DigitalIn(4));
   wings = std::make_shared<Wings>(pros::adi::DigitalOut(1),
                                   pros::adi::DigitalOut(2));
   pros::Task([&]() {
@@ -111,11 +113,23 @@ void autonomous() {
 
     case AutonMode::close_quals:
       std::cout << "Running Close Quals\n";
-      odometry->setState({24_in - 5_in, 24_in - 5_in, 45_deg});
-      intake->release();
-      pros::delay(300);
-      chassis->driveToPoint({3_ft, 3_ft});
-      chassis->driveToPoint({5.5_ft, 30_in});
+      // odometry->setState({24_in - 5_in, 24_in - 5_in, 45_deg});
+      // intake->release();
+      // pros::delay(300);
+      // chassis->driveToPoint({3_ft, 3_ft});
+      // chassis->driveToPoint({5.5_ft, 30_in});
+      odometry->setState({-3_ft - 6.5_in, -4_ft - 6.25_in, 180_deg});
+      wings->toggleExtended(Wings::Wing::right, true);
+      chassis->turnToAngle(0_deg);
+      chassis->waitUntilSettled();
+      wings->toggleExtended(Wings::Wing::right, false);
+      chassis->turnToAngle(180_deg - 45_deg);
+      chassis->waitUntilSettled();
+      intake->setManualMode(true, -12000);
+      pros::delay(500);
+      intake->setManualMode(false);
+      chassis->driveToPoint({-5_ft, -4_ft}, true);
+      chassis->driveToPoint({-5_ft, -3_ft + 2.25_in}, true);
 
       // Removes the ball from the match load zone
       break;
@@ -133,7 +147,33 @@ void autonomous() {
       chassis->driveDistance(-7_in);
       chassis->waitUntilSettled();
       chassis->driveToPoint({3_ft, 3_ft});
+      wings->toggleExtended(Wings::Wing::left, true);
       chassis->driveToPoint({3_ft, 5.5_ft});
+      chassis->turnToAngle(45_deg);
+      chassis->waitUntilSettled();
+      // odometry->setState({1_ft - 1.5_in, -5_ft, 180_deg});
+      // chassis->driveDistance(2_in);
+      // chassis->waitUntilSettled();
+      // pros::delay(250);
+      // chassis->driveToPoint({3_ft, -5_ft}, true, 0_in, 0.5);
+      // chassis->driveToPoint({5_ft, -3_ft}, true, 0_in, 0.5);
+      // chassis->driveToPoint({5_ft, -2.75_ft}, true);  // Score 1st ball
+      // chassis->driveToPoint({5_ft, -3_ft}, false);
+      // chassis->driveToPoint({5_ft, -2.75_ft}, false);  // Score 2nd ball
+      // chassis->driveToPoint({5_ft, -3_ft}, false);
+      // chassis->driveToPoint({0.875_ft, -2.375_ft}, false);
+      // chassis->turnToPoint({4_ft, -1_ft});
+      // intake->setManualMode(true, -12000);
+      // pros::delay(500);
+      // intake->setManualMode(false);
+      // chassis->driveToPoint({0.625_ft, -0.5_ft}, false);
+      // wings->toggleExtended(Wings::Wing::left, true);
+      // wings->toggleExtended(Wings::Wing::right, true);
+      // chassis->driveToPoint({3.6_ft, -0.5_ft}, true);
+      // wings->toggleExtended(Wings::Wing::left, false);
+      // wings->toggleExtended(Wings::Wing::right, false);
+      // chassis->driveToPoint({3_ft, -0.5_ft}, false);
+      // chassis->driveToPoint({3.6_ft, -0.5_ft}, false);
 
       break;
     case AutonMode::close_finals:
@@ -198,7 +238,9 @@ void autonomous() {
       wings->toggleExtended(Wings::Wing::right);
       pros::delay(250);
       chassis->driveDistance(-3.6_ft);
+      chassis->waitUntilSettled();
       chassis->driveDistance(2_ft);
+      chassis->waitUntilSettled();
 
       break;
   }
@@ -214,7 +256,10 @@ void opcontrol() {
   okapi::ControllerButton autoFire(okapi::ControllerDigital::A);
   okapi::ControllerButton leftWing(okapi::ControllerDigital::L1);
   okapi::ControllerButton rightWing(okapi::ControllerDigital::R1);
+  okapi::ControllerButton elevationMech(okapi::ControllerDigital::Y);
   bool autofiring = false;
+  bool elevation = false;
+  auto startTime = pros::millis();
 
 #ifdef tuning
   constexpr auto size = 3;
@@ -236,6 +281,7 @@ void opcontrol() {
 
   while (true) {
 #ifndef tuning
+
     model->arcade(controller.getAnalog(okapi::ControllerAnalog::leftY),
                   controller.getAnalog(okapi::ControllerAnalog::rightX));
     if (armCata.changedToPressed()) {
@@ -263,6 +309,12 @@ void opcontrol() {
     }
     if (rightWing.changedToPressed()) {
       wings->toggleExtended(Wings::Wing::right);
+    }
+    if (
+        // pros::millis() - startTime > 90 * 1000 &&
+        elevationMech.changedToPressed()) {
+      elevation = !elevation;
+      pros::adi::DigitalOut(3).set_value(elevation);
     }
 #endif
 #ifdef tuning

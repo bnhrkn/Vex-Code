@@ -7,13 +7,15 @@
 Intake::Intake(pros::Motor motor,
                // std::shared_ptr<Catapult> cata,
                // std::shared_ptr<okapi::SkidSteerModel> model,
-               pros::Optical sensor)
+               pros::Optical sensor,
+               pros::adi::DigitalIn liftSwitch)
     : motor(std::move(motor)),
       sensor(sensor),
+      liftSwitch(liftSwitch),
       internalTask([this]() { taskFunction(); }) {
-  sensor.set_led_pwm(255);
+  sensor.set_led_pwm(0);
   motor.set_gearing(pros::E_MOTOR_GEAR_BLUE);
-  motor.set_brake_mode(pros::MotorBrake::hold);
+  motor.set_brake_mode(pros::MotorBrake::coast);
 }
 Intake::~Intake() {
   internalTask.remove();
@@ -22,7 +24,7 @@ Intake::~Intake() {
 
 void Intake::taskFunction() {
   int ballHeldTime = 0;
-  constexpr int extraRunTime = 150;
+  constexpr int extraRunTime = 500;
   while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
       std::cout << "Manual mode\n";
@@ -77,9 +79,10 @@ bool Intake::seeBall() {
   if (sensor.get_proximity() == 0) {
     return false;
   }
-  return hue > 55.0 && hue < 90.0;
+  return hue > 52.0 && hue < 90.0;
 }
 bool Intake::hasBall() {
   constexpr auto holdingProxThreshold = 200;
+  // std::cout << sensor.get_proximity() << "\n";
   return seeBall() && sensor.get_proximity() > holdingProxThreshold;
 }

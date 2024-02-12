@@ -1,11 +1,15 @@
 #include "project/catapult.hpp"
 #include <limits>
 #include <utility>
+#include "mp-units/core.h"
 using namespace okapi::literals;
 
-Catapult::Catapult(pros::Motor motor, pros::Rotation rotation)
+Catapult::Catapult(pros::Motor motor,
+                   pros::Rotation rotation,
+                   pros::Distance distance)
     : motor(std::move(motor)),
-      sensor(std::move(rotation)),
+      rotation(std::move(rotation)),
+      distance(std::move(distance)),
       internalTask([this]() { taskFunction(); }) {
   if (abs(getAngle() - 45_deg) < 5_deg) {
     ready = true;
@@ -18,13 +22,40 @@ Catapult::~Catapult() {
 }
 
 void Catapult::taskFunction() {
-  while (pros::Task::notify_take(true, 10) == 0U) {
-    if (shouldFire) {
+  int closeTime = 0;
+  bool countedShot = false;
+  while (pros::Task::notify_take(true, 0) == 0U) {
+    constexpr auto distMinThres = 30;
+    auto distReading = distance.get();
+
+    if (getAngle() > 50_deg) {
+      armed = true;
+    } else if (getAngle() < 15_deg) {
+      armed = false;
+    }
+
+    if (distReading <= distMinThres) {
+      closeTime += 10;
+    } else {
+      closeTime = 0;
+    }
+
+    if (rotation.get_velocity() < 1000 && !countedShot) {
+      shotNum++;
+      countedShot = true;
+      std::cout << shotNum << "\n";
+    } else if (rotation.get_velocity() > 0) {
+      countedShot = false;
+    }
+
+    if ((getAngle() < 55_deg && !armed) || closeTime > 50) {
       motor.move_voltage(12000);
+      // std::cout << rotation.get_velocity() << "\n";
     } else {
       motor.move_voltage(0);
     }
     pros::delay(10);
+
     //   // std::cout << "Shoot Drawing\n";
     //   armed = false;
     //   ready = false;
@@ -92,7 +123,11 @@ bool Catapult::isReady() {
   return ready;
 }
 
+int Catapult::getShotNUm() {
+  return shotNum;
+}
+
 okapi::QAngle Catapult::getAngle() {
-  return okapi::OdomMath::constrainAngle180(sensor.get_position() / 100.0 *
+  return okapi::OdomMath::constrainAngle180(rotation.get_position() / 100.0 *
                                             1_deg);
 }

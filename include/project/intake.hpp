@@ -9,7 +9,9 @@ class Intake {
  public:
   enum class Mode;
   enum class State;
-  Intake(pros::Motor motor, pros::Optical sensor);
+  Intake(pros::Motor motor,
+         pros::Optical sensor,
+         pros::adi::DigitalIn liftSwitch);
   ~Intake();
   void setManualMode(bool manual, int32_t voltage = 12000);
   void waitUntilSettled(uint32_t timeoutMillis = TIMEOUT_MAX);
@@ -23,5 +25,6 @@ class Intake {
   std::atomic_bool manual = false;
   pros::Motor motor;
   pros::Optical sensor;
+  pros::adi::DigitalIn liftSwitch;
   pros::Task internalTask;
 };
