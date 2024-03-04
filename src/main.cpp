@@ -123,13 +123,18 @@ void autonomous() {
       chassis->turnToAngle(0_deg);
       chassis->waitUntilSettled();
       wings->toggleExtended(Wings::Wing::right, false);
-      chassis->turnToAngle(180_deg - 45_deg);
+      // chassis->turnToAngle(180_deg - 45_deg);
+      // chassis->waitUntilSettled();
+      // intake->setManualMode(true, -12000);
+      // pros::delay(500);
+      // intake->setManualMode(false);
+      // chassis->driveToPoint({-5_ft, -4_ft}, true);
+      // chassis->driveToPoint({-5_ft, -3_ft + 2.25_in}, true);
+      chassis->driveToPoint({-3_ft, -3_ft});
+      wings->toggleExtended(Wings::Wing::right, true);
+      chassis->driveToPoint({-8_in, -3_ft});
+      chassis->turnByAngle(90_deg);
       chassis->waitUntilSettled();
-      intake->setManualMode(true, -12000);
-      pros::delay(500);
-      intake->setManualMode(false);
-      chassis->driveToPoint({-5_ft, -4_ft}, true);
-      chassis->driveToPoint({-5_ft, -3_ft + 2.25_in}, true);
 
       // Removes the ball from the match load zone
       break;

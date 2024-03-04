@@ -24,7 +24,7 @@ Intake::~Intake() {
 
 void Intake::taskFunction() {
   int ballHeldTime = 0;
-  constexpr int extraRunTime = 500;
+  constexpr int extraRunTime = 750;
   while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
       std::cout << "Manual mode\n";
