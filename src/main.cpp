@@ -49,14 +49,14 @@ void initialize() {
   auto left = std::make_shared<okapi::MotorGroup>(
       std::initializer_list<okapi::Motor>{-1, -2, -3});
   auto right = std::make_shared<okapi::MotorGroup>(
-      std::initializer_list<okapi::Motor>{4, 5, 6});
+      std::initializer_list<okapi::Motor>{7, 8, 9});
   model = std::make_shared<okapi::SkidSteerModel>(
       left, right, left->getEncoder(), right->getEncoder(), 600, 12000);
   model->setEncoderUnits(okapi::AbstractMotor::encoderUnits::degrees);
   model->setGearing(okapi::AbstractMotor::gearset::blue);
   model->setBrakeMode(okapi::AbstractMotor::brakeMode::hold);
 
-  imu = std::make_shared<pros::IMU>(18);
+  imu = std::make_shared<pros::IMU>(14);
   imu->reset(true);
 
   odometry = std::make_shared<CustomOdom>(left->getEncoder(),
@@ -78,9 +78,9 @@ void initialize() {
   chassis = std::make_shared<CustomChassisController>(
       model, turnPID, distancePID, odometry, scales, gearing);
 
-  catapult = std::make_shared<Catapult>(pros::Motor(-12), pros::Rotation(16),
-                                        pros::Distance(14));
-  intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11),
+  catapult = std::make_shared<Catapult>(pros::Motor(-5), pros::Rotation(20),
+                                        pros::Distance(15));
+  intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(6),
                                     pros::adi::DigitalIn(4));
   wings = std::make_shared<Wings>(pros::adi::DigitalOut(1),
                                   pros::adi::DigitalOut(2));
