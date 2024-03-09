@@ -7,15 +7,18 @@
 Intake::Intake(pros::Motor motor,
                // std::shared_ptr<Catapult> cata,
                // std::shared_ptr<okapi::SkidSteerModel> model,
-               pros::Optical sensor,
+               pros::Optical optical,
+               pros::Vision vision,
                pros::adi::DigitalIn liftSwitch)
     : motor(std::move(motor)),
-      sensor(sensor),
+      optical(optical),
+      vision(std::move(vision)),
       liftSwitch(liftSwitch),
       internalTask([this]() { taskFunction(); }) {
-  sensor.set_led_pwm(0);
+  optical.set_led_pwm(0);
   motor.set_gearing(pros::E_MOTOR_GEAR_BLUE);
   motor.set_brake_mode(pros::MotorBrake::coast);
+  vision.set_signature(1, &green_sig);
 }
 Intake::~Intake() {
   internalTask.remove();
@@ -74,15 +77,20 @@ void Intake::waitUntilSettled(uint32_t timeoutMillis) {
 }
 
 bool Intake::seeBall() {
-  auto hue = sensor.get_hue();
-  // std::cout << sensor.get_proximity() << "," << sensor.get_hue() << "\n";
-  if (sensor.get_proximity() == 0) {
-    return false;
+  int32_t area_threshold = 0;
+  std::array<pros::vision_object, 10> objects{};
+  vision.read_by_sig(0, 1, objects.size(), objects.data());
+  int32_t total_green_area = 0;
+  for (auto object : objects) {
+    total_green_area += object.height * object.width;
   }
-  return hue > 52.0 && hue < 90.0;
+  if (total_green_area > 0) {
+    std::cout << "Area" << total_green_area << "\n";
+  }
+  return total_green_area > area_threshold;
 }
 bool Intake::hasBall() {
   constexpr auto holdingProxThreshold = 200;
   // std::cout << sensor.get_proximity() << "\n";
-  return seeBall() && sensor.get_proximity() > holdingProxThreshold;
+  return seeBall() && optical.get_proximity() > holdingProxThreshold;
 }

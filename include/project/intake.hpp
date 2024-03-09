@@ -10,7 +10,8 @@ class Intake {
   enum class Mode;
   enum class State;
   Intake(pros::Motor motor,
-         pros::Optical sensor,
+         pros::Optical optical,
+         pros::Vision vision,
          pros::adi::DigitalIn liftSwitch);
   ~Intake();
   void setManualMode(bool manual, int32_t voltage = 12000);
@@ -24,7 +25,18 @@ class Intake {
   void taskFunction();
   std::atomic_bool manual = false;
   pros::Motor motor;
-  pros::Optical sensor;
+  pros::Optical optical;
+  pros::Vision vision;
   pros::adi::DigitalIn liftSwitch;
   pros::Task internalTask;
+  pros::vision_signature green_sig =
+      pros::c::vision_signature_from_utility(1,
+                                             -4097,
+                                             -1985,
+                                             -3042,
+                                             -3971,
+                                             -1871,
+                                             -2920,
+                                             1.500,
+                                             0);
 };

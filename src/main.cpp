@@ -81,7 +81,7 @@ void initialize() {
   catapult = std::make_shared<Catapult>(pros::Motor(-12), pros::Rotation(16),
                                         pros::Distance(14));
   intake = std::make_shared<Intake>(pros::Motor(10), pros::Optical(11),
-                                    pros::adi::DigitalIn(4));
+                                    pros::Vision(16), pros::adi::DigitalIn(4));
   wings = std::make_shared<Wings>(pros::adi::DigitalOut(1),
                                   pros::adi::DigitalOut(2));
   pros::Task([&]() {
