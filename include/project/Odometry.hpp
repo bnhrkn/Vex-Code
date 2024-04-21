@@ -1,12 +1,12 @@
 #pragma once
 #include "main.h"
 
-class CustomOdom {
+class Odometry {
  public:
-  CustomOdom(std::shared_ptr<okapi::ContinuousRotarySensor> left,
-             std::shared_ptr<okapi::ContinuousRotarySensor> right,
-             std::shared_ptr<pros::IMU> imu,
-             okapi::ChassisScales odomScales);
+  Odometry(std::shared_ptr<okapi::ContinuousRotarySensor> left,
+           std::shared_ptr<okapi::ContinuousRotarySensor> right,
+           std::shared_ptr<pros::IMU> imu,
+           okapi::ChassisScales odomScales);
   void step();
   [[nodiscard]] okapi::OdomState getState() const;
   [[nodiscard]] okapi::Point getPoint() const;
@@ -26,6 +26,6 @@ class CustomOdom {
 
   okapi::ChassisScales scales;
 
-  mutable pros::Mutex stateMutex;
+  // mutable pros::Mutex stateMutex;
   okapi::OdomState state{0 * okapi::inch, 0 * okapi::inch, 0 * okapi::degree};
 };

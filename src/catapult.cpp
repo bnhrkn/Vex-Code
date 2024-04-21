@@ -14,23 +14,36 @@ Catapult::Catapult(pros::Motor motor,
   if (abs(getAngle() - 45_deg) < 5_deg) {
     ready = true;
   }
+  motor.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
 };
 
 Catapult::~Catapult() {
   internalTask.remove();
   motor.move(0);
 }
+void Catapult::setArmMode(bool armMode, uint32_t shotNum) {
+  alwaysArm = armMode;
+}
+bool Catapult::getArmMode() {
+  return alwaysArm;
+}
 
 void Catapult::taskFunction() {
   int closeTime = 0;
-  bool countedShot = false;
+  int readyTime = 0;
+  // bool countedShot = false;
+  pros::c::adi_pin_mode(4, OUTPUT);
+  auto led = pros::adi::DigitalOut(4);
   while (pros::Task::notify_take(true, 0) == 0U) {
+    constexpr auto readyAngle = 30_deg;
+    constexpr auto doneAngle = 5_deg;
     constexpr auto distMinThres = 30;
+    constexpr auto distReadyThres = 250;
     auto distReading = distance.get();
 
-    if (getAngle() > 50_deg) {
+    if (getAngle() > readyAngle) {
       armed = true;
-    } else if (getAngle() < 15_deg) {
+    } else if (getAngle() < doneAngle) {
       armed = false;
     }
 
@@ -40,90 +53,59 @@ void Catapult::taskFunction() {
       closeTime = 0;
     }
 
-    if (rotation.get_velocity() < 1000 && !countedShot) {
-      shotNum++;
-      countedShot = true;
-      std::cout << shotNum << "\n";
-    } else if (rotation.get_velocity() > 0) {
-      countedShot = false;
-    }
+    // if (armed && distReading < distReadyThres) {
+    //   readyTime += 10;
+    // } else {
+    //   readyTime = 0;
+    // }
+    bool movingUp = rotation.get_velocity() < -100;
+    bool shouldArm =
+        !movingUp && !armed && (distReading <= distReadyThres || alwaysArm);
+    bool shouldFire = !movingUp && closeTime > 50;
 
-    if ((getAngle() < 55_deg && !armed) || closeTime > 50) {
+    if (shouldFire || shouldArm) {
       motor.move_voltage(12000);
-      // std::cout << rotation.get_velocity() << "\n";
+      led.set_value(0);
+      // std::cout << "Drawing back. Velocity: " <<
+      // rotation.get_velocity()
+      //           << " Voltage: " << motor.get_voltage() << "\n";
+    } else if (movingUp) {
+      motor.move_velocity(0);
+      led.set_value(1);
+      pros::delay(50);
     } else {
       motor.move_voltage(0);
+      led.set_value(0);
+
+      // std::cout << "Not Drawing Back.\n";
     }
-    pros::delay(10);
 
-    //   // std::cout << "Shoot Drawing\n";
-    //   armed = false;
-    //   ready = false;
-
-    //   int numZeroEfficiency = 0;
-    //   while (sensor.get_velocity() > -100) {
-    //     if (motor.get_efficiency() == 0) {
-    //       numZeroEfficiency++;
-    //     } else {
-    //       numZeroEfficiency = 0;
-    //     }
-    //     if (numZeroEfficiency > 10) {
-    //       std::cout << "Catapult Liamed Out\n";
-    //       motor.move_voltage(0);
-    //       ready = true;
-    //     } else {
-    //       motor.move_voltage(10000);
-    //     }
-    //     pros::delay(10);
-    //   }
-
-    //   // motor.move_voltage(0);
+    // if (rotation.get_velocity() < -250) {
     //   motor.move_velocity(0);
-    //   motor.set_brake_mode(pros::E_MOTOR_BRAKE_BRAKE);
-    //   while (getAngle() > 5_deg) {
-    //     // Wait for catapult to go up
-    //     pros::delay(10);
-    //   }
-    //   shouldFire = false;
-    // } else if (shouldArm) {
-    //   // std::cout << "Arm Drawing\n";
-    //   while (getAngle() < 56_deg) {
-    //     motor.move_voltage(10000);
-    //     pros::delay(1);
-    //   }
-    //   motor.move_voltage(0);
-    //   armed = true;
-    //   ready = true;
-    //   shouldArm = false;
-    // } else if (abs(getAngle() - 45_deg) > 5_deg) {
-    //   // std::cout << "Idle Drawing\n";
-    //   while (getAngle() < 45_deg) {
-    //     motor.move_voltage(10000);
-    //     pros::delay(10);
-    //   }
-    //   ready = true;
-    //   motor.move_voltage(0);
+    //   std::cout << "Position" << rotation.get_position() << "\n";
+    // }
+    pros::delay(10);
   }
 }
 
-void Catapult::fire() {
-  shouldArm = false;
-  shouldFire = !shouldFire;
-}
+// void Catapult::fire() {
+//   shouldArm = false;
+//   shouldFire = !shouldFire;
+// }
 
-void Catapult::arm() {
-  shouldArm = true;
-}
+// void Catapult::arm() {
+//   shouldArm = true;
+// }
 
 bool Catapult::isArmed() {
   return armed;
 }
 
-bool Catapult::isReady() {
-  return ready;
-}
+// bool Catapult::isReady() {
+//   return ready;
+// }
 
-int Catapult::getShotNUm() {
+int Catapult::getShotNum() {
   return shotNum;
 }
 

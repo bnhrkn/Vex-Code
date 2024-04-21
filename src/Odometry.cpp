@@ -1,20 +1,20 @@
 #include <utility>
 
+#include "project/Odometry.hpp"
 #include "project/algorithms.hpp"
-#include "project/customOdom.hpp"
 using ScopeLock = std::scoped_lock<pros::Mutex>;
 using namespace okapi::literals;
 
-CustomOdom::CustomOdom(std::shared_ptr<okapi::ContinuousRotarySensor> left,
-                       std::shared_ptr<okapi::ContinuousRotarySensor> right,
-                       std::shared_ptr<pros::IMU> imu,
-                       okapi::ChassisScales odomScales)
+Odometry::Odometry(std::shared_ptr<okapi::ContinuousRotarySensor> left,
+                   std::shared_ptr<okapi::ContinuousRotarySensor> right,
+                   std::shared_ptr<pros::IMU> imu,
+                   okapi::ChassisScales odomScales)
     : left(std::move(left)),
       right(std::move(right)),
       imu(std::move(imu)),
       scales(odomScales){};
 
-CustomOdom::SensorValues CustomOdom::SensorValues::operator-(
+Odometry::SensorValues Odometry::SensorValues::operator-(
     SensorValues values) const {
   return {x - values.x, angle - values.angle};
 }
@@ -50,15 +50,14 @@ struct UnitlessPoint {
 //   scales = ichassisScales;
 // };
 
-void CustomOdom::step() {
+void Odometry::step() {
   using namespace okapi::literals;
   // ScopeLock stateLock(stateMutex);
 
   const auto reading =
       // Must update setState to match
-      CustomOdom::SensorValues{
-          (left->get() + right->get()) / 2.0 * okapi::degree,
-          imu->get_rotation() * -1 * okapi::degree};
+      Odometry::SensorValues{(left->get() + right->get()) / 2.0 * okapi::degree,
+                             imu->get_rotation() * -1 * okapi::degree};
 
   // std::cout << std::format(
   //     "Left: {}, Right: {}, X: {}, Angle: {}\n", left->get(), right->get(),
@@ -151,23 +150,20 @@ void CustomOdom::step() {
 
   prevReading = reading;
 }
-okapi::OdomState CustomOdom::getState() const {
+okapi::OdomState Odometry::getState() const {
   // ScopeLock lock(stateMutex);
   return state;
 };
-okapi::Point CustomOdom::getPoint() const {
-  const auto state = getState();
-  // std::cout << std::format("Sending Point ({},{}) to getPoint caller\n",
-  //                          state.x.convert(1_in), state.y.convert(1_in));
+okapi::Point Odometry::getPoint() const {
   return {state.x, state.y};
 }
-void CustomOdom::setState(const okapi::OdomState& istate) {
+void Odometry::setState(const okapi::OdomState& istate) {
   // copeLock lock(stateMutex);
   state = istate;
   imu->set_rotation(-state.theta.convert(1_deg));
   left->reset();  // Very important?
   right->reset();
-  prevReading = CustomOdom::SensorValues{
+  prevReading = Odometry::SensorValues{
       (left->get() + right->get()) / 2.0 / 100 * okapi::degree,
       imu->get_rotation() * -1 * okapi::degree};
 };

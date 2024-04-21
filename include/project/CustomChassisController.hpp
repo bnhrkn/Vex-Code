@@ -1,7 +1,7 @@
 #pragma once
 #include "main.h"
+#include "project/Odometry.hpp"
 #include "project/algorithms.hpp"
-#include "project/customOdom.hpp"
 
 class CustomChassisController {
  public:
@@ -9,14 +9,15 @@ class CustomChassisController {
       std::shared_ptr<okapi::ChassisModel> imodel,
       std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
       std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
-      std::shared_ptr<CustomOdom> iodom,
+      std::shared_ptr<Odometry> iodom,
+
       okapi::ChassisScales ichassisScales,
+      Constraints constraints,
       okapi::AbstractMotor::GearsetRatioPair idriveRatio);
   ~CustomChassisController();
 
   void runPath(std::vector<squiggles::ProfilePoint>);  // Pass a fully formed
                                                        // path to follow
-
   void turnToAngle(okapi::QAngle angle);
 
   void turnByAngle(okapi::QAngle angle);
@@ -51,7 +52,7 @@ class CustomChassisController {
   bool isSettled();
 
   // Wait for isSettled
-  void waitUntilSettled();
+  [[deprecated("Use free function waitFor(func).")]] void waitUntilSettled();
 
   // Stop any open or closed-loop movements
   void cancelMovement();
@@ -73,7 +74,7 @@ class CustomChassisController {
   std::shared_ptr<okapi::IterativePosPIDController> distancePID;
   changeLimiter<double> distanceLimiter{1, 0};
 
-  std::shared_ptr<CustomOdom> odom;
+  std::shared_ptr<Odometry> odom;
 
   std::shared_ptr<okapi::ChassisModel> model;
 
@@ -83,5 +84,6 @@ class CustomChassisController {
                               // with new ones
 
   okapi::ChassisScales chassisScales;
+  Constraints constraints;
   okapi::AbstractMotor::GearsetRatioPair driveRatio;
 };

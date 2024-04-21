@@ -9,11 +9,14 @@ class Catapult {
  public:
   Catapult(pros::Motor motor, pros::Rotation rotation, pros::Distance distance);
   ~Catapult();
-  void fire();
-  void arm();
+  // void fire();
+  // void arm();
+  void setArmMode(bool armMode,
+                  uint32_t shotNums = std::numeric_limits<uint32_t>::max());
+  bool getArmMode();
   bool isArmed();
   bool isReady();
-  int getShotNUm();
+  int getShotNum();
 
  private:
   pros::Motor motor;
@@ -23,8 +26,9 @@ class Catapult {
   debouncer<double> debounce{0, 100, 100};
   void taskFunction();
   okapi::QAngle getAngle();
-  std::atomic_bool shouldArm = false;
-  std::atomic_bool shouldFire = false;
+  // std::atomic_bool shouldArm = false;
+  // std::atomic_bool shouldFire = false;
+  bool alwaysArm = false;
   std::atomic_bool armed = false;
   std::atomic_bool ready = false;
   int shotNum = 0;

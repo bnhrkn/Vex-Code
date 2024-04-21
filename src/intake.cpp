@@ -1,24 +1,21 @@
 #include <utility>
 
 #include <algorithm>
+#include <format>
 #include "project/algorithms.hpp"
+#include "project/geometry.hpp"
 #include "project/intake.hpp"
 
-Intake::Intake(pros::Motor motor,
-               // std::shared_ptr<Catapult> cata,
-               // std::shared_ptr<okapi::SkidSteerModel> model,
-               pros::Optical optical,
-               pros::Vision vision,
-               pros::adi::DigitalIn liftSwitch)
+Intake::Intake(pros::Motor motor, std::shared_ptr<Camera> camera)
     : motor(std::move(motor)),
-      optical(optical),
-      vision(std::move(vision)),
-      liftSwitch(liftSwitch),
+      camera(camera),
       internalTask([this]() { taskFunction(); }) {
-  optical.set_led_pwm(0);
   motor.set_gearing(pros::E_MOTOR_GEAR_BLUE);
   motor.set_brake_mode(pros::MotorBrake::coast);
-  vision.set_signature(1, &green_sig);
+
+  camera->set_signature(Camera::Color::GREEN, green_sig);
+  camera->set_signature(Camera::Color::RED, red_sig);
+  camera->set_signature(Camera::Color::BLUE, blue_sig);
 }
 Intake::~Intake() {
   internalTask.remove();
@@ -27,7 +24,7 @@ Intake::~Intake() {
 
 void Intake::taskFunction() {
   int ballHeldTime = 0;
-  constexpr int extraRunTime = 750;
+  constexpr int extraRunTime = 0;
   while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
       std::cout << "Manual mode\n";
@@ -45,6 +42,11 @@ void Intake::taskFunction() {
     } else {
       motor.move_velocity(0);
     }
+    // if (seeBall() && !hasBall()) {
+    //   motor.move_voltage(12000);
+    // } else {
+    //   motor.move_voltage(0);
+    // }
     pros::delay(10);
   }
 }
@@ -77,20 +79,32 @@ void Intake::waitUntilSettled(uint32_t timeoutMillis) {
 }
 
 bool Intake::seeBall() {
-  int32_t area_threshold = 0;
-  std::array<pros::vision_object, 10> objects{};
-  vision.read_by_sig(0, 1, objects.size(), objects.data());
-  int32_t total_green_area = 0;
+  constexpr auto areaThreshold = 30;
+  int32_t totalArea = 0;
+  auto objects = camera->read_objects(
+      {Camera::Color::GREEN, Camera::Color::RED, Camera::Color::BLUE});
   for (auto object : objects) {
-    total_green_area += object.height * object.width;
+    auto intersection = geometry::intersection(object, see_box);
+    if (intersection.has_value()) {
+      totalArea += intersection.value().area();
+    }
   }
-  if (total_green_area > 0) {
-    std::cout << "Area" << total_green_area << "\n";
-  }
-  return total_green_area > area_threshold;
+  return totalArea > areaThreshold;
 }
 bool Intake::hasBall() {
-  constexpr auto holdingProxThreshold = 200;
-  // std::cout << sensor.get_proximity() << "\n";
-  return seeBall() && optical.get_proximity() > holdingProxThreshold;
+  constexpr auto holdingAreaThreshold = 10;
+  int32_t totalArea = 0;
+  auto objects = camera->read_objects(
+      {Camera::Color::GREEN, Camera::Color::RED, Camera::Color::BLUE});
+  // std::cout << "clear\n";
+  for (auto object : objects) {
+    // std::cout << std::format("{},{},{},{},#00ff00\n", object.left_coord,
+    //                          object.top_coord, object.width, object.height);
+    auto intersection = geometry::intersection(object, have_box);
+    if (intersection.has_value()) {
+      totalArea += intersection.value().area();
+    }
+  }
+  // std::cout << "update\n";
+  return totalArea > holdingAreaThreshold;
 }

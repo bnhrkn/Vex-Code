@@ -1,7 +1,9 @@
 #pragma once
+#include <concepts>
 #include "geometry/pose.hpp"
 #include "geometry/profilepoint.hpp"
 #include "main.h"
+#include "project/motionProfiling.hpp"
 
 // class RamseteController {
 // public:
@@ -24,6 +26,10 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
                       const squiggles::ProfilePoint& goalPoint,
                       double b,
                       double zeta);
+ChassisSpeeds ramsete(const okapi::OdomState& nowPose,
+                      const ProfilePoint& goalPoint,
+                      double b = 2.0,
+                      double zeta = 0.7);
 
 [[nodiscard]] auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
 [[nodiscard]] auto stateToPoint(okapi::OdomState state) -> okapi::Point;
@@ -31,25 +37,6 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
                                        okapi::ChassisScales scales,
                                        okapi::AbstractMotor::GearsetRatioPair)
     -> TankSpeeds;
-
-[[nodiscard]] auto rotateAroundOrigin(const okapi::OdomState& frame,
-                                      const okapi::QAngle& angle)
-    -> okapi::OdomState;
-[[nodiscard]] auto rotateAroundOrigin(const okapi::Point& point,
-                                      const okapi::QAngle& angle)
-    -> okapi::Point;
-[[nodiscard]] auto translatePoint(const okapi::OdomState& frame,
-                                  const okapi::OdomState& delta)
-    -> okapi::OdomState;
-[[nodiscard]] auto translatePoint(const okapi::Point& point,
-                                  const okapi::Point& delta) -> okapi::Point;
-
-[[nodiscard]] auto angleToPoint(const okapi::Point& destination,
-                                const okapi::Point& origin) -> okapi::QAngle;
-
-[[nodiscard]] auto distanceToPoint(const okapi::Point& destination,
-                                   const okapi::Point& origin)
-    -> okapi::QLength;
 
 [[nodiscard]] auto distanceCalcRPM(const okapi::QLength& distance)
     -> okapi::QAngularSpeed;
@@ -133,6 +120,23 @@ auto inRange(auto num, std::pair<decltype(num), decltype(num)> range) -> bool {
   auto minMax = std::minmax(range.first, range.second);
   return (num > std::get<0>(minMax)) && (num < std::get<1>(minMax));
 };
+template <typename T>
+concept bool_invocable = requires(T c) {
+  { c() } -> std::convertible_to<bool>;
+};
+
+bool waitFor(bool_invocable auto&& func,
+             std::uint32_t deadline = std::numeric_limits<uint32_t>::max(),
+             std::uint32_t interval = 10) {
+  auto startTime = pros::millis();
+  while (pros::millis() < deadline) {
+    if (std::forward<decltype(func)>(func)()) {
+      return true;
+    }
+    pros::Task::delay_until(&startTime, interval);
+  }
+  return false;
+}
 
 class lowPassFilter : public okapi::Filter {
  public:
@@ -155,3 +159,13 @@ class DisconnectDetector {
 };
 
 double sinc(double radians);
+
+// template <std::three_way_comparable T>
+template <typename T>
+constexpr bool approximatelyEqual(T a, T b, T epsilon) {
+  T diff = a - b;
+  if (diff < T(0.0)) {
+    diff = -diff;
+  }
+  return diff < epsilon;
+};

@@ -3,6 +3,7 @@
 #include <numbers>
 #include "geometry/pose.hpp"
 #include "main.h"
+
 using namespace okapi::literals;
 
 ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
@@ -39,6 +40,70 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
   // return {goalPoint.vector.vel * okapi::mps, rotationVel * okapi::radps};
 }
 
+ChassisSpeeds ramsete(const okapi::OdomState& nowPose,
+                      const ProfilePoint& goalPoint,
+                      const double b,
+                      const double zeta) {
+  using namespace okapi::literals;
+  const auto goalPose = goalPoint.pose;
+  const auto globalError =
+      okapi::OdomState{goalPose.x - nowPose.x, goalPose.y - nowPose.y,
+                       goalPose.theta - nowPose.theta};
+  const auto& nowAngle = nowPose.theta.convert(1_rad);
+  const auto localError = okapi::OdomState{
+      std::cos(nowAngle) * globalError.x + std::sin(nowAngle) * globalError.y,
+      std::cos(nowAngle) * globalError.y - std::sin(nowAngle) * globalError.x,
+      globalError.theta};
+
+  const auto rotationVel = goalPoint.angularVel;
+  // std::cout << std::format(
+  //     "Global Error: ({}, {}, {}). Local Error: ({}, {}, {}). \n",
+  //     globalError.x.convert(1_m), globalError.y.convert(1_m),
+  //     globalError.theta.convert(1_rad), localError.x.convert(1_m),
+  //     localError.y.convert(1_m), localError.theta.convert(1_rad));
+
+  const auto kgain =
+      2 * zeta *
+      std::sqrt(std::pow(rotationVel.convert(okapi::radps), 2) +
+                b * std::pow(goalPoint.linearVel.convert(okapi::mps), 2)) /
+      1_s;
+
+  const okapi::QSpeed outLinearVel =
+      goalPoint.linearVel * std::cos(localError.theta.convert(1_rad)) +
+      kgain * localError.x;
+  const okapi::QAngularSpeed outRotationVel =
+      rotationVel + kgain * localError.theta +
+      sinc(localError.theta.convert(1_rad)) * b * goalPoint.linearVel *
+          localError.y / okapi::meter2 * okapi::radian;
+
+  std::cout << std::format(
+      "kgain {}, first {}, second {}, third {}\n", kgain.convert(1 / 1_s),
+      rotationVel.convert(1_rad / 1_s),
+      (kgain * localError.theta).convert(1_rad / 1_s),
+      (sinc(localError.theta.convert(1_rad)) * b * goalPoint.linearVel *
+       localError.y / okapi::meter2 * okapi::radian)
+          .convert(1_rad / 1_s));
+
+  // std::cout << "Diff. L: " << outLinearVel - goalPoint.vector.vel
+  //           << " Diff. R: " << outRotationVel - rotationVel << std::endl;
+  std::cout << std::format(
+      "Goal: ({}, {}, {})\nNow: ({}, {}, {})\nG Err: ({}, {}, {})\nL Err:"
+      "({}, "
+      "{}, {})\nTarget Vel: {}, Angle Vel: {}\nAdj Vel: {}, Adj Angle Vel: "
+      "{}\n\n",
+      goalPose.x.convert(1_m), goalPose.y.convert(1_m),
+      goalPose.theta.convert(1_rad), nowPose.x.convert(1_m),
+      nowPose.y.convert(1_m), nowPose.theta.convert(1_rad),
+      globalError.x.convert(1_m), globalError.y.convert(1_m),
+      globalError.theta.convert(1_rad), localError.x.convert(1_m),
+      localError.y.convert(1_m), localError.theta.convert(1_rad),
+      goalPoint.linearVel.convert(1_mps),
+      goalPoint.angularVel.convert(1_rad / 1_s), outLinearVel.convert(1_mps),
+      outRotationVel.convert(1_rad / 1_s));
+  return {outLinearVel, outRotationVel};
+  // return {goalPoint.vector.vel * okapi::mps, rotationVel * okapi::radps};
+};
+
 auto stateToPose(const okapi::OdomState state) -> squiggles::Pose {
   return {state.x.convert(okapi::meter),  // Transform theta for squiggles
           state.y.convert(okapi::meter), state.theta.convert(okapi::radian)};
@@ -68,49 +133,6 @@ auto chassisToTankSpeeds(const ChassisSpeeds speeds,
       (scales.wheelDiameter / 2) * okapi::radian / ratio.ratio;
 
   return {leftSpeed, rightSpeed};
-}
-
-// Rotates a vector around the origin by a certain angle
-auto rotateAroundOrigin(const okapi::OdomState& frame,
-                        const okapi::QAngle& angle) -> okapi::OdomState {
-  // const auto &x = frame.x;
-  // const auto &y = frame.y;
-  // const auto &yaw = frame.theta;
-  const auto& [x, y, yaw] = frame;
-
-  const auto& radAngle = angle.convert(okapi::radian);
-  return {x * std::cos(radAngle) - y * std::sin(radAngle),
-          x * std::sin(radAngle) + y * std::cos(radAngle), yaw - angle};
-}
-
-auto rotateAroundOrigin(const okapi::Point& point, const okapi::QAngle& angle)
-    -> okapi::Point {
-  const auto& [x, y] = point;
-  const auto& radAngle = angle.convert(okapi::radian);
-  return {x * std::cos(radAngle) - y * std::sin(radAngle),
-          x * std::sin(radAngle) + y * std::cos(radAngle)};
-}
-
-// Translate a vector by a certain delta. Theta in delta has no effect.
-auto translatePoint(const okapi::OdomState& frame,
-                    const okapi::OdomState& delta) -> okapi::OdomState {
-  return {frame.x - delta.x, frame.y - delta.y, frame.theta};
-}
-auto translatePoint(const okapi::Point& point, const okapi::Point& delta)
-    -> okapi::Point {
-  return {point.x - delta.x, point.y - delta.y};
-}
-
-auto angleToPoint(const okapi::Point& destination, const okapi::Point& origin)
-    -> okapi::QAngle {
-  auto point = translatePoint(destination, origin);
-  return std::atan2(point.y.convert(1_m), point.x.convert(1_m)) * okapi::radian;
-}
-
-auto distanceToPoint(const okapi::Point& destination,
-                     const okapi::Point& origin) -> okapi::QLength {
-  auto point = translatePoint(destination, origin);
-  return std::hypot(point.x.convert(1_m), point.y.convert(1_m)) * 1_m;
 }
 
 auto distanceCalcRPM(const okapi::QLength& distance) -> okapi::QAngularSpeed {
@@ -150,4 +172,8 @@ template <typename T>
   }
 T abs(T value) {
   return (value < 0) ? -value : value;
+}
+
+constexpr bool approximatelyEqual(double a, double b, double epsilon) {
+  return abs(a - b) < epsilon;
 }
