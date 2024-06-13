@@ -31,7 +31,6 @@ class UI {
   lv_obj_t* homeTab;
   lv_obj_t* autonRoller;
   lv_obj_t* colorRoller;
-  lv_obj_t* colorBtn;
 
   lv_obj_t* graphTab;
   lv_obj_t* chart;

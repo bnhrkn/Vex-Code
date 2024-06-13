@@ -28,21 +28,21 @@ class Intake {
   pros::Task internalTask;
   geometry::rectangle see_box = {-VISION_FOV_WIDTH / 2, 0, VISION_FOV_WIDTH,
                                  VISION_FOV_HEIGHT / 2};
-  geometry::rectangle have_box = {-VISION_FOV_WIDTH / 2, 13, VISION_FOV_WIDTH,
-                                  40};
+  geometry::rectangle have_box = {-VISION_FOV_WIDTH / 2, 6, VISION_FOV_WIDTH,
+                                  32};
   //   geometry::rectangle yellow_tag_box = {{0, 100}, {200, 140}};
   int32_t green_slot = 1;
   int32_t red_slot = 2;
   int32_t blue_slot = 3;
   pros::vision_signature green_sig =
       pros::c::vision_signature_from_utility(green_slot,
-                                             -7391,
-                                             -6289,
-                                             -6840,
-                                             -4551,
-                                             -3071,
-                                             -3811,
-                                             6.000,
+                                             -7585,
+                                             -7067,
+                                             -7326,
+                                             -5369,
+                                             -4387,
+                                             -4878,
+                                             11.000,
                                              0);
   pros::vision_signature red_sig =  //
       pros::c::vision_signature_from_utility(red_slot,

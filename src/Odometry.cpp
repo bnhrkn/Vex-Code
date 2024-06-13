@@ -72,7 +72,7 @@ void Odometry::step() {
   const auto dThetaRad = readingChange.angle.convert(okapi::radian);
 
   constexpr auto degreesPerInch =  // Drivetrain specific constant
-      360_deg * (48.0 / 36) / (2.75_in * std::numbers::pi);
+      360_deg * (48.0 / 36) / (3.25_in * std::numbers::pi);
   const auto arcLengthM = (readingChange.x / degreesPerInch).convert(1_m);
 
   // Where we were

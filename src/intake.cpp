@@ -23,11 +23,12 @@ Intake::~Intake() {
 }
 
 void Intake::taskFunction() {
-  int ballHeldTime = 0;
+  int ballHeldTime = 10;
+  int reverseTime = 0;
   constexpr int extraRunTime = 0;
   while (pros::Task::notify_take(true, 0) == 0U) {
     if (manual) {
-      std::cout << "Manual mode\n";
+      // std::cout << "Manual mode\n";
       pros::delay(10);
       continue;
     }
@@ -38,8 +39,13 @@ void Intake::taskFunction() {
     }
 
     if (seeBall() && (!hasBall() || ballHeldTime < extraRunTime)) {
+      // std::cout << "Intaking\n";
       motor.move_voltage(12000);
-    } else {
+    } else if (ballHeldTime > 0 && ballHeldTime < reverseTime) {
+      motor.move_voltage(-6000);
+    }
+
+    else {
       motor.move_velocity(0);
     }
     // if (seeBall() && !hasBall()) {
@@ -83,12 +89,20 @@ bool Intake::seeBall() {
   int32_t totalArea = 0;
   auto objects = camera->read_objects(
       {Camera::Color::GREEN, Camera::Color::RED, Camera::Color::BLUE});
+  // std::cout << "clear\n";
+
   for (auto object : objects) {
     auto intersection = geometry::intersection(object, see_box);
     if (intersection.has_value()) {
+      // std::cout << std::format("{},{},{},{},#00ff00\n", object.left_coord,
+      //                          object.top_coord, object.width,
+      //                          object.height);
       totalArea += intersection.value().area();
     }
+    // std::cout << "update\n";
+    pros::delay(100);
   }
+
   return totalArea > areaThreshold;
 }
 bool Intake::hasBall() {
@@ -101,10 +115,12 @@ bool Intake::hasBall() {
     // std::cout << std::format("{},{},{},{},#00ff00\n", object.left_coord,
     //                          object.top_coord, object.width, object.height);
     auto intersection = geometry::intersection(object, have_box);
+
     if (intersection.has_value()) {
       totalArea += intersection.value().area();
     }
   }
+
   // std::cout << "update\n";
   return totalArea > holdingAreaThreshold;
 }

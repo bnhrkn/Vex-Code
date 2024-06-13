@@ -15,7 +15,6 @@ UI::UI(std::unique_ptr<lv_obj_t> ihomeScreen)
       homeTab(lv_tabview_add_tab(tabView, "Home")),
       autonRoller(lv_roller_create(homeTab)),
       colorRoller(lv_roller_create(homeTab)),
-      colorBtn(lv_btn_create(homeTab)),
       graphTab(lv_tabview_add_tab(tabView, "Graph")),
       chart(lv_chart_create(graphTab)),
       series({lv_chart_add_series(chart,
@@ -33,21 +32,16 @@ UI::UI(std::unique_ptr<lv_obj_t> ihomeScreen)
 
   lv_obj_set_size(autonRoller, 160 - 2 * pad, tabview_height - 2 * pad);
   lv_obj_align_to(autonRoller, homeTab, LV_ALIGN_TOP_LEFT, pad, pad);
+
+  lv_roller_set_options(colorRoller, "Red\nBlue\n", LV_ROLLER_MODE_INFINITE);
+  lv_obj_set_size(colorRoller, 160 - 2 * pad, 80);
+  lv_obj_align_to(colorRoller, homeTab, LV_ALIGN_TOP_RIGHT, -pad, pad);
   // lv_roller_set_options(colorRoller, "Blue\nRed\n", LV_ROLLER_MODE_NORMAL);
 
   lv_chart_set_point_count(chart, 500);
   lv_chart_set_range(chart, LV_CHART_AXIS_PRIMARY_Y, 0, 600);
   lv_chart_set_type(chart, LV_CHART_TYPE_LINE);
   lv_obj_set_size(chart, 460, 161);
-
-  lv_obj_add_event_cb(
-      colorBtn,
-      [](lv_event_t* event) {
-        auto* obj = lv_event_get_target(event);
-        UI* gui = static_cast<UI*>(obj->user_data);
-        gui->blue = lv_obj_get_state(obj) == LV_STATE_CHECKED;
-      },
-      LV_EVENT_CLICKED, this);
 
   lv_label_set_long_mode(positionLabel, LV_LABEL_LONG_CLIP);
   lv_obj_set_width(positionLabel, hres);
@@ -61,7 +55,6 @@ UI::~UI() {
   lv_obj_del(homeTab);
   lv_obj_del(autonRoller);
   lv_obj_del(colorRoller);
-  lv_obj_del(colorBtn);
 
   lv_obj_del(positionTab);
   lv_obj_del(positionLabel);
@@ -77,8 +70,8 @@ void UI::setPosition(const okapi::OdomState& state) {
 auton::AutonMode UI::getAuton() {
   return static_cast<auton::AutonMode>(lv_roller_get_selected(autonRoller));
 }
-[[nodiscard, deprecated("FIX ME!")]] bool UI::isBlueTeam() const {
-  return false;
+bool UI::isBlueTeam() const {
+  return static_cast<bool>(lv_roller_get_selected(colorRoller));
 }
 void UI::graph(double value, size_t which) {
   try {

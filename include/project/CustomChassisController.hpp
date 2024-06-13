@@ -2,6 +2,7 @@
 #include "main.h"
 #include "project/Odometry.hpp"
 #include "project/algorithms.hpp"
+#include "project/tracker.hpp"
 
 class CustomChassisController {
  public:
@@ -9,10 +10,9 @@ class CustomChassisController {
       std::shared_ptr<okapi::ChassisModel> imodel,
       std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
       std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
-      std::shared_ptr<Odometry> iodom,
+      std::shared_ptr<Tracker> itracker,
 
       okapi::ChassisScales ichassisScales,
-      Constraints constraints,
       okapi::AbstractMotor::GearsetRatioPair idriveRatio);
   ~CustomChassisController();
 
@@ -52,7 +52,7 @@ class CustomChassisController {
   bool isSettled();
 
   // Wait for isSettled
-  [[deprecated("Use free function waitFor(func).")]] void waitUntilSettled();
+  void waitUntilSettled();
 
   // Stop any open or closed-loop movements
   void cancelMovement();
@@ -74,7 +74,7 @@ class CustomChassisController {
   std::shared_ptr<okapi::IterativePosPIDController> distancePID;
   changeLimiter<double> distanceLimiter{1, 0};
 
-  std::shared_ptr<Odometry> odom;
+  std::shared_ptr<Tracker> tracker;
 
   std::shared_ptr<okapi::ChassisModel> model;
 
@@ -84,6 +84,5 @@ class CustomChassisController {
                               // with new ones
 
   okapi::ChassisScales chassisScales;
-  Constraints constraints;
   okapi::AbstractMotor::GearsetRatioPair driveRatio;
 };

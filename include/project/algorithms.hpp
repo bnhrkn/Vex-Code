@@ -3,7 +3,6 @@
 #include "geometry/pose.hpp"
 #include "geometry/profilepoint.hpp"
 #include "main.h"
-#include "project/motionProfiling.hpp"
 
 // class RamseteController {
 // public:
@@ -26,10 +25,6 @@ ChassisSpeeds ramsete(const squiggles::Pose& nowPose,
                       const squiggles::ProfilePoint& goalPoint,
                       double b,
                       double zeta);
-ChassisSpeeds ramsete(const okapi::OdomState& nowPose,
-                      const ProfilePoint& goalPoint,
-                      double b = 2.0,
-                      double zeta = 0.7);
 
 [[nodiscard]] auto stateToPose(okapi::OdomState state) -> squiggles::Pose;
 [[nodiscard]] auto stateToPoint(okapi::OdomState state) -> okapi::Point;

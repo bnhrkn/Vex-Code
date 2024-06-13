@@ -11,21 +11,20 @@ CustomChassisController::CustomChassisController(
     std::shared_ptr<okapi::ChassisModel> imodel,
     std::shared_ptr<okapi::IterativePosPIDController> iturnPID,
     std::shared_ptr<okapi::IterativePosPIDController> idistancePID,
-    std::shared_ptr<Odometry> iodom,
+    std::shared_ptr<Tracker> itracker,
     okapi::ChassisScales ichassisScales,
-    Constraints constraints,
     okapi::AbstractMotor::GearsetRatioPair idriveRatio)
     : movementTask([this]() { movementLoop(); }),
       odomTask([this]() { odomLoop(); }),
       turnPID(std::move(iturnPID)),
       distancePID(std::move(idistancePID)),
-      odom(std::move(iodom)),
+      tracker(std::move(itracker)),
       model(std::move(imodel)),
       chassisScales(ichassisScales),
-      constraints(constraints),
       driveRatio(idriveRatio) {
-  turnPID->setTarget(okapi::OdomMath::constrainAngle360(odom->getState().theta)
-                         .convert(1_deg));
+  turnPID->setTarget(
+      okapi::OdomMath::constrainAngle360(tracker->getState().theta)
+          .convert(1_deg));
   distancePID->setTarget(0);
   // pros::c::task_notify_when_deleting(
   //     pros::c::task_get_current(), (pros::task_t)movementTask, 1,
@@ -72,7 +71,7 @@ void CustomChassisController::movementLoop() {
 
           // Do all the pathy stuff
           const auto speeds =
-              ramsete(stateToPose(odom->getState()), point, 2.0, 0.5);
+              ramsete(stateToPose(tracker->getState()), point, 2.0, 0.5);
           const auto [left, right] =
               chassisToTankSpeeds(speeds, chassisScales, driveRatio);
           // std::cout << "left: " << left.convert(1_rpm) << ", right: " <<
@@ -91,24 +90,29 @@ void CustomChassisController::movementLoop() {
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
         while (taskValid() && mode.load() == MovementType::turn) {
-          auto nowAngle = odom->getState().theta;
+          auto nowAngle = tracker->getState().theta;
           turnPID->step(nowAngle.convert(1_deg));
 
           if (turnPID->isSettled()) {
+            std::cout << std::format("Turn Settled. Angle: {}, Target: {}\n",
+                                     nowAngle.convert(1_deg),
+                                     turnPID->getTarget());
             break;  // Must be after step or will instantly settle
           }
 
-          std::cout << "Now Angle: "
-                    << nowAngle.convert(1_deg)
-                    // << ", Error:" << error.convert(1_deg)
-                    << ", Target: " << turnPID->getTarget()
-                    << ", Real Error: " << turnPID->getError() << std::endl;
+          // std::cout << "Now Angle: "
+          //           << nowAngle.convert(1_deg)
+          //           // << ", Error:" << error.convert(1_deg)
+          //           << ", Target: " << turnPID->getTarget()
+          //           << ", Real Error: " << turnPID->getError() << std::endl;
           auto angleOutput = turnLimiter.filterIncrease(turnPID->getOutput());
 
           model->rotate(-angleOutput);
           pros::Task::delay_until(prev.get(), 10);
         }
-        std::cout << std::format("Done Turn\n");
+        std::cout << std::format(
+            "Done Turn, Task Valid: {}, Mode: {}, Settled: {}\n", taskValid(),
+            static_cast<int>(mode.load()), turnPID->isSettled());
         model->stop();
         break;
       }
@@ -116,11 +120,11 @@ void CustomChassisController::movementLoop() {
         std::cout << std::format("Entered straight case\n");
         std::scoped_lock<pros::Mutex> lock(movementMutex);
         auto prev = std::make_unique<std::uint32_t>(pros::millis());
-        auto initalPos = odom->getState();
+        auto initalPos = tracker->getState();
 
         while (taskValid() && mode.load() == MovementType::straight) {
           auto nowTranslatedPos =
-              geometry::translatePoint(odom->getState(), initalPos);
+              geometry::translatePoint(tracker->getState(), initalPos);
           auto nowRotatedPos =
               geometry::rotateAroundOrigin(nowTranslatedPos, -initalPos.theta);
           auto x = nowRotatedPos.x.convert(
@@ -138,7 +142,7 @@ void CustomChassisController::movementLoop() {
 
           // Angle stuff to remain on course
           auto nowAngle =
-              okapi::OdomMath::constrainAngle360(odom->getState().theta);
+              okapi::OdomMath::constrainAngle360(tracker->getState().theta);
           auto angleError = okapi::OdomMath::constrainAngle180(
               turnPID->getTarget() * 1_deg - nowAngle);
           auto angleInputValue =
@@ -178,12 +182,13 @@ void CustomChassisController::movementLoop() {
 void CustomChassisController::odomLoop() {
   auto prev = std::make_unique<std::uint32_t>(pros::millis());
   while (pros::Task::notify_take(true, 0) == 0) {
-    odom->step();
+    tracker->step();
     pros::Task::delay_until(prev.get(), 10);
   }
 }
 
 bool CustomChassisController::isSettled() {
+  // std::cout << "Settled Status: " << movementTask.get_state() << "\n";
   return movementTask.get_state() == pros::E_TASK_STATE_SUSPENDED;
 }
 
@@ -199,7 +204,7 @@ void CustomChassisController::turnToAngle(okapi::QAngle angle) {
   turnPID->reset();
 
   double target = angle.convert(1_deg);
-  double theta = odom->getState().theta.convert(1_deg);
+  double theta = tracker->getState().theta.convert(1_deg);
   // Normalize target angle
   target = fmod(target, 360.0);
   if (target < 0) {
@@ -223,9 +228,9 @@ void CustomChassisController::turnByAngle(okapi::QAngle angle) {
   mode.store(MovementType::disabled);
   std::scoped_lock<pros::Mutex> lock(movementMutex);
   turnPID->reset();
-  turnPID->setTarget((odom->getState().theta + angle).convert(1_deg));
+  turnPID->setTarget((tracker->getState().theta + angle).convert(1_deg));
   std::cout << "Turning by angle " << angle.convert(1_deg) << "deg by target "
-            << (odom->getState().theta + angle).convert(1_deg) << "deg\n";
+            << (tracker->getState().theta + angle).convert(1_deg) << "deg\n";
 
   mode.store(MovementType::turn);
   movementTask.resume();
@@ -263,9 +268,9 @@ void CustomChassisController::turnToPoint(okapi::Point point,
                                           okapi::QAngle offset) {
   std::cout << "Turning to point (" << point.x.convert(1_in) << ", "
             << point.y.convert(1_in) << ") from ("
-            << odom->getPoint().x.convert(1_in) << ", "
-            << odom->getPoint().y.convert(1_in) << ")\n";
-  turnToAngle(geometry::angleToPoint(point, odom->getPoint()) + offset);
+            << tracker->getPoint().x.convert(1_in) << ", "
+            << tracker->getPoint().y.convert(1_in) << ")\n";
+  turnToAngle(geometry::angleToPoint(point, tracker->getPoint()) + offset);
   waitUntilSettled();
 }
 
@@ -273,7 +278,7 @@ void CustomChassisController::drivePathFromHere(
     std::vector<okapi::OdomState> points,
     squiggles::SplineGenerator& generator) {
   std::vector<squiggles::Pose> poses(points.size() + 1);
-  poses.front() = stateToPose(odom->getState());
+  poses.front() = stateToPose(tracker->getState());
   std::ranges::transform(points, poses.begin() + 1, stateToPose);
   std::cout << "Generating path throstd::unique_ptr<std::unique_ptr<ugh ";
   for (auto pose : poses) {
@@ -290,7 +295,7 @@ void CustomChassisController::driveToPointByPath(
     bool discreteTurn) {
   std::cout << std::format("Driving to state {} from {}\n",
                            destination.str(1_tile, "_t"),
-                           odom->getState().str(1_tile, "_t"));
+                           tracker->getState().str(1_tile, "_t"));
   if (discreteTurn) {
     turnToPoint(stateToPoint(destination));
   }
@@ -330,17 +335,18 @@ void CustomChassisController::driveToPoint(
     bool reverse,
     okapi::QLength distanceThreshold,
     double maxSpeed) {  // TODO: when angle is closer to the back, reverse
-  if (geometry::distanceToPoint(point, odom->getPoint()) < distanceThreshold) {
+  if (geometry::distanceToPoint(point, tracker->getPoint()) <
+      distanceThreshold) {
     std::cout << std::format("Distance threshold not met: no movement");
     return;
   }
 
   turnToPoint(point, static_cast<int>(reverse) * 180_deg);
-  auto distance = geometry::distanceToPoint(point, odom->getPoint());
+  auto distance = geometry::distanceToPoint(point, tracker->getPoint());
   std::cout << std::format(
       "Driving {}\" to point ({}\", {}\") from ({}\", {}\")\n",
       distance.convert(1_in), point.x.convert(1_in), point.y.convert(1_in),
-      odom->getPoint().x.convert(1_in), odom->getPoint().y.convert(1_in));
+      tracker->getPoint().x.convert(1_in), tracker->getPoint().y.convert(1_in));
   driveDistance(reverse ? -distance : distance, maxSpeed);
   waitUntilSettled();
 }

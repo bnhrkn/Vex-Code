@@ -46,11 +46,14 @@ void Tracker::setColor(AllianceColor color) {
   return reading;
 }
 void Tracker::step() {
-  if (gps->get_error() * okapi::meter > 2 * okapi::inch) {
-    odometry->step();
-    state = odometry->getState();
-  } else {
-    state = getGPSState();
-    odometry->setState(state);
-  }
+  odometry->step();
+  state = odometry->getState();
+  // if (gps->get_error() * okapi::meter > 2 * okapi::inch) {
+  //   odometry->step();
+  //   state = odometry->getState();
+  // } else {
+  //   std::cout << std::format("Tared with est error {}\n", gps->get_error());
+  //   state = getGPSState();
+  //   odometry->setState(state);
+  // }
 }
